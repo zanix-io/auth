@@ -111,8 +111,8 @@ Deno.test('authenticate() should return tokens and user info', async () => {
   const locals: any = {}
   const result = await connector.authenticate('auth_code_999', { locals } as any)
 
-  assert(result.sessionTokens.accessToken)
-  assert(result.sessionTokens.refreshToken)
+  assert(result.session.accessToken)
+  assert(result.session.refreshToken)
   assertEquals(locals.session.type, 'user')
   assertEquals(locals.session.status, 'active')
   assertEquals(locals.session.rateLimit, 100)
