@@ -21,7 +21,7 @@ import { Provider } from '@zanix/server'
  *
  * @returns A decorated authentication provider class.
  */
-export const createAuthProvider = () => {
+export const createAuthProvider: () => typeof ZanixAuthProvider = () => {
   Provider({ startMode: 'lazy' })(ZanixAuthProvider)
   return ZanixAuthProvider
 }

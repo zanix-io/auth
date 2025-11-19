@@ -7,5 +7,5 @@
  * \_____/ \__,_||_| |_||_|/_/\_\
  */
 
-export { default as googleOAuthCore } from './connectors/google/core.ts'
-export { default as authCoreMiddlewares } from './middlewares/core.ts'
+export * from './connectors/google/core.ts'
+export * from './middlewares/core.ts'

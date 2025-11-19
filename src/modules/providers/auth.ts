@@ -1,4 +1,5 @@
 import type { AuthConnectors, CoreAuthConnectors } from 'typings/connectors.ts'
+import type { OtpFlow } from 'typings/auth.ts'
 
 import { ZanixProvider } from '@zanix/server'
 import { authConnectors } from '../connectors/mod.ts'
@@ -34,7 +35,7 @@ export class ZanixAuthProvider extends ZanixProvider {
    * const user = await authProvider.google.authenticate(code);
    * ```
    */
-  public get google() {
+  public get google(): AuthConnectors['google-oauth2'] {
     return this.use('google-oauth2')
   }
 
@@ -49,5 +50,5 @@ export class ZanixAuthProvider extends ZanixProvider {
    * const verified = await otpInstance.verify(target, code);
    * ```
    */
-  public otp = otp.call(this)
+  public otp: OtpFlow = otp.call(this)
 }

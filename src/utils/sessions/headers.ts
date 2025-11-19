@@ -116,7 +116,7 @@ export const getDefaultSessionHeaders = async (options: {
 export const getClientSubject = (
   headers: HandlerContext['req']['headers'],
   type: SessionTypes,
-) => {
+): string | null => {
   const { sub: subjectHeaderKey } = SESSION_HEADERS[type]
   const userCookie = getCookies(headers)[subjectHeaderKey]
   return userCookie || headers.get(subjectHeaderKey)

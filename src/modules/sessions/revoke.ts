@@ -1,5 +1,6 @@
 import type { ScopedContext, ZanixCacheProvider, ZanixKVConnector } from '@zanix/server'
 import type { SessionTypes } from 'typings/sessions.ts'
+import type { JWTPayload } from 'typings/jwt.ts'
 
 import { addTokenToBlockList } from 'utils/sessions/block-list.ts'
 import { localSessionDefinition } from './create.ts'
@@ -66,7 +67,7 @@ export const revokeSessionAndToken = async (
     kvDb?: ZanixKVConnector
     sessionType?: SessionTypes
   },
-) => {
+): Promise<JWTPayload> => {
   const { token, cache, kvDb, sessionType = 'user' } = options
   const payload = await addTokenToBlockList(token, cache, kvDb)
   localSessionDefinition(ctx, {

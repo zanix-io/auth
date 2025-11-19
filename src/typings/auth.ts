@@ -1,5 +1,11 @@
-import type { AccessTokenOptions, RefreshTokenOptions, SessionTypes } from './sessions.ts'
+import type {
+  AccessTokenOptions,
+  RefreshTokenOptions,
+  SessionTokens,
+  SessionTypes,
+} from './sessions.ts'
 import type { JWTAlgorithm, JWTVerifyOptions } from './jwt.ts'
+import type { ScopedContext } from '@zanix/server'
 
 /**
  * Configuration options for JWT validation.
@@ -60,4 +66,58 @@ export type AuthSessionOptions<T extends SessionTypes> = {
   access?: Partial<AccessTokenOptions<T>>
   /** Session refresh token */
   refresh?: Partial<RefreshTokenOptions<T>>
+}
+
+export type OtpFlow = {
+  /**
+   * Generates a numeric OTP and stores it in the configured cache provider.
+   *
+   * The OTP is associated with a unique `target` (such as an email, phone number,
+   * or user ID) and saved with an expiration time (TTL).
+   *
+   * @param {GenerateOTPOptions} options - The OTP data and settings.
+   */
+  generate: (options: GenerateOTPOptions) => Promise<string>
+  /**
+   * Validates an OTP code previously generated for the given target.
+   *
+   * The method retrieves the stored OTP from Redis (if available) or from the
+   * local in-memory cache. When validation succeeds, the OTP is removed to ensure
+   * one-time use.
+   * @param target
+   * @param code
+   */
+  verify: (
+    /**
+     * Target identifier for the OTP delivery.
+     * Typically an email address or phone number.
+     */
+    target: string,
+    /**
+     * The one-time password (OTP) code that the user provides for verification.
+     */
+    code: string,
+  ) => Promise<boolean>
+  /**
+   * Performs the full OTP authentication flow and initializes
+   * the local session for the authenticated user.
+   */
+  authenticate: <T extends SessionTypes>(
+    /**
+     * The scoped request context in which the local session user info
+     * will be stored.
+     */
+    ctx: ScopedContext,
+    /**
+     * Target identifier for the OTP delivery.
+     * Typically an email address or phone number.
+     */
+    target: string,
+    /**
+     * The one-time password (OTP) code that the user provides for verification.
+     */
+    code: string,
+    /** Optional configuration for customizing the generated local session */
+    sessionTokenOptions: AuthSessionOptions<T>,
+  ) => Promise<SessionTokens>
 }
