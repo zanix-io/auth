@@ -1,5 +1,5 @@
 import type { RateLimitsOptions } from 'typings/sessions.ts'
-import { errorResponses, type MiddlewareGlobalGuard } from '@zanix/server'
+import { httpErrorResponse, type MiddlewareGlobalGuard } from '@zanix/server'
 
 import { checkRateLimit, getRateLimitForSession } from 'utils/sessions/rate-limit.ts'
 import { generateAnonymousSession } from 'utils/sessions/anonymous.ts'
@@ -107,7 +107,7 @@ export const rateLimitGuard = (
     const secondsUntilReset = (windowEnd - dateInSeconds).toString()
 
     if (!canContinue) {
-      const response = errorResponses(
+      const response = httpErrorResponse(
         new HttpError('TOO_MANY_REQUESTS', {
           shouldLog: sessionType !== 'anonymous' && failedAttempts >= 3,
           message: 'Too Many Requests',
@@ -120,7 +120,7 @@ export const rateLimitGuard = (
             requestId: ctx.id,
           },
         }),
-        { [retryAfterHeader]: secondsUntilReset },
+        { headers: { [retryAfterHeader]: secondsUntilReset }, contextId: ctx.id },
       )
       return { response }
     }

@@ -36,11 +36,12 @@
     "jsr:@std/path@^1.1.2": "1.1.2",
     "jsr:@std/streams@~0.224.5": "0.224.5",
     "jsr:@std/testing@1.0.16": "1.0.16",
-    "jsr:@zanix/datamaster@0": "0.4.1",
-    "jsr:@zanix/server@1": "1.2.9",
-    "jsr:@zanix/server@^1.2.9": "1.2.9",
-    "jsr:@zanix/utils@*": "2.2.4",
-    "jsr:@zanix/utils@2": "2.2.4",
+    "jsr:@zanix/datamaster@0": "0.4.2",
+    "jsr:@zanix/datamaster@0.4.2": "0.4.2",
+    "jsr:@zanix/server@1": "1.3.2",
+    "jsr:@zanix/server@^1.3.2": "1.3.2",
+    "jsr:@zanix/utils@*": "2.2.6",
+    "jsr:@zanix/utils@2": "2.2.6",
     "npm:@types/node@*": "24.2.0",
     "npm:esbuild@0.20.2": "0.20.2",
     "npm:graphql@16": "16.12.0",
@@ -186,8 +187,8 @@
         "jsr:@std/path@^1.1.2"
       ]
     },
-    "@zanix/datamaster@0.4.1": {
-      "integrity": "ddbc9ded638bb5fcbee026f597599948a25862e722b0d56c779e6133cc6cddb3",
+    "@zanix/datamaster@0.4.2": {
+      "integrity": "e075ae4dcd3653a0fc16b1256349f34b5358c0a6905d76f248de7fd60cc7cc6a",
       "dependencies": [
         "jsr:@db/sqlite",
         "jsr:@zanix/server@1",
@@ -196,17 +197,18 @@
         "npm:redis"
       ]
     },
-    "@zanix/server@1.2.9": {
-      "integrity": "4558bdf925423ed30b7d981aa06ebfb421cf29fd57522c6e9867540d2cb8d814",
+    "@zanix/server@1.3.2": {
+      "integrity": "eefbf784e7882481e913be3dd5555833af483a1eecc6b6bb527645956cd0ae9c",
       "dependencies": [
         "jsr:@std/path@0.224",
+        "jsr:@zanix/server@^1.3.2",
         "jsr:@zanix/utils@2",
         "npm:graphql",
         "npm:redis"
       ]
     },
-    "@zanix/utils@2.2.4": {
-      "integrity": "b9a23df9f073ebd46d7f7d9babe3449388e01c878a7838053b85cba66f2fe9dc",
+    "@zanix/utils@2.2.6": {
+      "integrity": "37be22b3189af08334dc139fc0ea3a7b398de7157cc835968e38c4d2d94cc63b",
       "dependencies": [
         "jsr:@luca/esbuild-deno-loader",
         "jsr:@std/fmt@0.224",

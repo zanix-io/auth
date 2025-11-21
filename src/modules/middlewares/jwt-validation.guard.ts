@@ -3,7 +3,7 @@ import type { SessionStatus } from 'typings/sessions.ts'
 
 import { AUTH_HEADERS, DEFAULT_JWT_ISSUER, GENERAL_HEADERS } from 'utils/constants.ts'
 import { getClientSubject, getDefaultSessionHeaders } from 'utils/sessions/headers.ts'
-import { errorResponses, type MiddlewareGlobalGuard } from '@zanix/server'
+import { httpErrorResponse, type MiddlewareGlobalGuard } from '@zanix/server'
 import { checkTokenBlockList } from 'utils/sessions/block-list.ts'
 import { localSessionDefinition } from '../sessions/create.ts'
 import { HttpError, PermissionDenied } from '@zanix/errors'
@@ -130,7 +130,11 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
     const token = authHeader?.slice(7).trim()
     // deno-lint-ignore no-non-null-assertion
     if (!token || !authHeader!.startsWith('Bearer ')) {
-      const response = errorResponses(
+      const headers = await getDefaultSessionHeaders({
+        ...defaultSessionOpts,
+        sessionStatus: 'failed',
+      })
+      const response = httpErrorResponse(
         new HttpError('UNAUTHORIZED', {
           message: `${authHeaderKey} token is missing or invalid.`,
           cause: 'No JWT provided or Authorization header is not a Bearer token.',
@@ -141,7 +145,7 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
             requestId: ctx.id,
           },
         }),
-        await getDefaultSessionHeaders({ ...defaultSessionOpts, sessionStatus: 'failed' }),
+        { headers, contextId: ctx.id },
       )
 
       return { response }
@@ -156,7 +160,11 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
       const secret = Deno.env.get(keyName)
 
       if (!secret) {
-        const response = errorResponses(
+        const headers = await getDefaultSessionHeaders({
+          ...defaultSessionOpts,
+          sessionStatus: 'failed',
+        })
+        const response = httpErrorResponse(
           new HttpError('INTERNAL_SERVER_ERROR', {
             message: `An error occurred during ${type} authentication.`,
             cause: `Missing required JWT key in environment variables: ${keyName}.`,
@@ -167,7 +175,7 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
               keyName: keyName,
             },
           }),
-          await getDefaultSessionHeaders({ ...defaultSessionOpts, sessionStatus: 'failed' }),
+          { headers, contextId: ctx.id },
         )
 
         return { response }
@@ -224,7 +232,11 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
 
       return { headers }
     } catch (e) {
-      const response = errorResponses(
+      const headers = await getDefaultSessionHeaders({
+        ...defaultSessionOpts,
+        sessionStatus: 'failed',
+      })
+      const response = httpErrorResponse(
         new HttpError('FORBIDDEN', {
           message: 'You do not have access to this resource.',
           cause: e,
@@ -233,7 +245,7 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
             method: 'verifyJWT',
           },
         }),
-        await getDefaultSessionHeaders({ ...defaultSessionOpts, sessionStatus: 'failed' }),
+        { headers, contextId: ctx.id },
       )
 
       return { response }
