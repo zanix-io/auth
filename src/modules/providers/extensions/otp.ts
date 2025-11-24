@@ -2,7 +2,7 @@ import type { ZanixAuthProvider } from '../auth.ts'
 import type { OtpFlow } from 'typings/auth.ts'
 import type { SessionTokens } from 'typings/sessions.ts'
 
-import { generateSessionTokens } from 'modules/sessions/create.ts'
+import { generateSessionTokens } from 'utils/sessions/create.ts'
 import { generateOTP, verifyOTP } from 'utils/otp.ts'
 import { HttpError } from '@zanix/errors'
 

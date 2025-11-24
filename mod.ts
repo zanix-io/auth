@@ -22,12 +22,13 @@ export { verifyJWT } from 'utils/jwt/verify.ts'
 export { addTokenToBlockList, checkTokenBlockList } from 'utils/sessions/block-list.ts'
 
 // Sessions
-export { revokeSessionAndToken, revokeSessionTokens } from 'modules/sessions/revoke.ts'
+export { revokeAppTokens, revokeSessionToken } from 'utils/sessions/revoke.ts'
 export {
   createAccessToken,
+  createAppToken,
   createRefreshToken,
-  createSessionToken,
-} from 'modules/sessions/create.ts'
+  generateSessionTokens,
+} from 'utils/sessions/create.ts'
 export {
   getClientSubject,
   getDefaultSessionHeaders,

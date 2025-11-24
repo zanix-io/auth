@@ -3,9 +3,9 @@ import type { AuthSessionOptions } from 'typings/auth.ts'
 import type { JWTPayload } from 'typings/jwt.ts'
 import type {
   AccessTokenOptions,
+  AppTokenOptions,
   RefreshTokenOptions,
   SessionStatus,
-  SessionTokenOptions,
   SessionTokens,
   SessionTypes,
 } from 'typings/sessions.ts'
@@ -17,7 +17,7 @@ import { parseTTL } from '@zanix/helpers'
 import { decodeJWT } from 'utils/jwt/decode.ts'
 
 /**
- * Creates a signed JWT session token for a given user or API subject.
+ * Creates a signed app JWT token for a given user or API subject.
  *
  * Depending on the provided `type`, the function selects the appropriate
  * signing algorithm and key source. It also supports optional payload data
@@ -51,7 +51,7 @@ import { decodeJWT } from 'utils/jwt/decode.ts'
  *
  * @example
  * // Create a user session token (HS256)
- * const token = await createSessionToken({
+ * const token = await createAppToken({
  *   subject: "user_123",
  *   type: "user",
  *   expiration: "1h",
@@ -60,15 +60,15 @@ import { decodeJWT } from 'utils/jwt/decode.ts'
  *
  * @example
  * // Create an API session token (RS256)
- * const token = await createSessionToken({
+ * const token = await createAppToken({
  *   subject: "service_abc",
  *   type: "api",
  *   expiration: 3600,
  *   encryptionKey: Deno.env.get('API_ENCRYPTION_KEY'),
  * });
  */
-export const createSessionToken = async <T extends SessionTypes>(
-  options: SessionTokenOptions<T>,
+export const createAppToken = async <T extends SessionTypes>(
+  options: AppTokenOptions<T>,
 ): Promise<string> => {
   const { subject, expiration, type, payload, encryptionKey } = options
 
@@ -101,7 +101,7 @@ export const createSessionToken = async <T extends SessionTypes>(
     return token
   } catch (e) {
     throw new HttpError('BAD_REQUEST', {
-      message: `An error occurred while creating the ${type} session.`,
+      message: `An error occurred while creating the ${type} session token.`,
       cause: e,
       meta: {
         source: 'zanix',
@@ -111,6 +111,7 @@ export const createSessionToken = async <T extends SessionTypes>(
     })
   }
 }
+
 /**
  * Creates an access token with a maximum expiration time of 1 hour.
  *
@@ -151,7 +152,7 @@ export const createAccessToken = async <T extends SessionTypes>(
     })
   }
 
-  const token = await createSessionToken(options)
+  const token = await createAppToken(options)
   const { payload } = decodeJWT(token)
 
   localSessionDefinition(ctx, { type: options.type, payload, status: 'active' })
@@ -182,7 +183,7 @@ export const createAccessToken = async <T extends SessionTypes>(
 export const createRefreshToken = <T extends SessionTypes>(
   options: RefreshTokenOptions<T>,
 ): Promise<SessionTokens['refreshToken']> => {
-  return createSessionToken(options)
+  return createAppToken(options)
 }
 
 /**

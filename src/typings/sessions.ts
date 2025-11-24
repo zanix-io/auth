@@ -48,14 +48,14 @@ export type SessionStatus = 'active' | 'failed' | 'unconfirmed' | 'blocked' | 'r
  */
 export type SessionTypes = 'user' | 'api'
 
-export type SessionTokenOptions<T extends SessionTypes> = {
+export type AppTokenOptions<T extends SessionTypes> = {
   /** User or API Id. */
   subject: string
   /**
    * The expiration type, either as a human-readable
    * string (e.g., `"1h"`, `"15m"`, `"7d"`) or a numeric value in seconds.The expiration time in seconds (from now), or a `Date` object.
    */
-  expiration: number | string
+  expiration?: number | string
   /**
    * The JWT data payload.
    */
@@ -102,13 +102,13 @@ export type SessionTokenOptions<T extends SessionTypes> = {
 }
 
 export type AccessTokenOptions<T extends SessionTypes> =
-  & Omit<SessionTokenOptions<T>, 'expiration'>
+  & Omit<AppTokenOptions<T>, 'expiration'>
   & {
     expiration: '30m' | '1h' | number
   }
 
 export type RefreshTokenOptions<T extends SessionTypes> =
-  & Omit<SessionTokenOptions<T>, 'expiration'>
+  & Omit<AppTokenOptions<T>, 'expiration'>
   & {
     expiration: '1w' | '1mo' | '6mo' | '1y'
   }

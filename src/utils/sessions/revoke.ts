@@ -3,10 +3,10 @@ import type { SessionTypes } from 'typings/sessions.ts'
 import type { JWTPayload } from 'typings/jwt.ts'
 
 import { addTokenToBlockList } from 'utils/sessions/block-list.ts'
-import { localSessionDefinition } from './create.ts'
+import { localSessionDefinition } from 'utils/sessions/create.ts'
 
 /**
- * Revokes one or multiple sessions by adding their token(s) to the block list.
+ * Revokes one or multiple app token to the block list.
  *
  * This function accepts either a single token string or an array of token strings.
  * If an array is provided, all tokens are processed concurrently.
@@ -17,14 +17,14 @@ import { localSessionDefinition } from './create.ts'
  * @returns {Promise<void>} A promise that resolves once all tokens have been added to the block list.
  *
  * @example
- * // Revoke a single session
- * await revokeSessions("abc123token")
+ * // Revoke a single token
+ * await revokeTokens("abc123token")
  *
  * @example
- * // Revoke multiple sessions
- * await revokeSessions(["token1", "token2", "token3"])
+ * // Revoke multiple tokens
+ * await revokeTokens(["token1", "token2", "token3"])
  */
-export const revokeSessionTokens = async (
+export const revokeAppTokens = async (
   tokenInfo: string | string[],
   cache: ZanixCacheProvider,
   kvDb?: ZanixKVConnector,
@@ -52,14 +52,14 @@ export const revokeSessionTokens = async (
  * @param options.sessionType - Optional session type (default: `"user"`) to mark in the context.
  *
  * @example
- * await revokeSessionAndToken(context, {
+ * await revokeSessionToken(context, {
  *   token: accessToken,
  *   cache: cacheProvider,
  *   kvDb: kvConnector,
  *   sessionType: "user",
  * });
  */
-export const revokeSessionAndToken = async (
+export const revokeSessionToken = async (
   ctx: ScopedContext,
   options: {
     token: string

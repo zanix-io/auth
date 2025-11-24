@@ -5,7 +5,7 @@ import { AUTH_HEADERS, DEFAULT_JWT_ISSUER, GENERAL_HEADERS } from 'utils/constan
 import { getClientSubject, getDefaultSessionHeaders } from 'utils/sessions/headers.ts'
 import { httpErrorResponse, type MiddlewareGlobalGuard } from '@zanix/server'
 import { checkTokenBlockList } from 'utils/sessions/block-list.ts'
-import { localSessionDefinition } from '../sessions/create.ts'
+import { localSessionDefinition } from 'utils/sessions/create.ts'
 import { HttpError, PermissionDenied } from '@zanix/errors'
 import { rateLimitGuard } from './rate-limit.guard.ts'
 import { decodeJWT } from 'utils/jwt/decode.ts'

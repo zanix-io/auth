@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { assert, assertEquals, assertFalse } from '@std/assert'
-import { revokeSessionAndToken } from 'modules/sessions/revoke.ts'
+import { revokeSessionToken } from 'utils/sessions/revoke.ts'
 import { createJWT } from '@zanix/auth'
 
 console.warn = () => {}
@@ -15,7 +15,7 @@ Deno.test('Create access token with correct local session', async () => {
     rateLimit: 100,
     aud: ['admin'],
   }, 'my-secret')
-  const payload = await revokeSessionAndToken({ locals } as any, {
+  const payload = await revokeSessionToken({ locals } as any, {
     token,
     cache: { local: { set: () => {} } } as any,
   })

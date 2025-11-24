@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-11-24
+
+### Changed
+
+- Renamed **session tokens** to **app tokens** for consistency across the authentication system.
+
+### Added
+
+- Implemented the **app token flow** in the authentication provider.
+
 ## [0.2.0] - 2025-11-19
 
 ### Changed

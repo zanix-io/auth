@@ -1,8 +1,9 @@
 import type { AuthConnectors, CoreAuthConnectors } from 'typings/connectors.ts'
-import type { OtpFlow } from 'typings/auth.ts'
+import type { OtpFlow, SessionFlow } from 'typings/auth.ts'
 
 import { ZanixProvider } from '@zanix/server'
 import { authConnectors } from '../connectors/mod.ts'
+import { session } from './extensions/session.ts'
 import { otp } from './extensions/otp.ts'
 
 /**
@@ -51,4 +52,9 @@ export class ZanixAuthProvider extends ZanixProvider {
    * ```
    */
   public otp: OtpFlow = otp.call(this)
+
+  /**
+   * Generates an revoke session tokens (access and refresh).
+   */
+  public session: SessionFlow = session.call(this)
 }

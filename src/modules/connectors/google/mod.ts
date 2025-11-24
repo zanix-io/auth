@@ -2,7 +2,7 @@ import type { GoogleTokens, GoogleUserInfo } from 'typings/connectors.ts'
 import type { SessionTokens, SessionTypes } from 'typings/sessions.ts'
 import type { AuthSessionOptions } from 'typings/auth.ts'
 
-import { generateSessionTokens } from 'modules/sessions/create.ts'
+import { generateSessionTokens } from 'utils/sessions/create.ts'
 import { type ConnectorOptions, RestClient, type ScopedContext, TargetError } from '@zanix/server'
 import { generateUUID } from '@zanix/helpers'
 

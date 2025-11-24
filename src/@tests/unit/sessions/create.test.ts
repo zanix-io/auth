@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { assert, assertEquals } from '@std/assert'
-import { createAccessToken } from 'modules/sessions/create.ts'
+import { createAccessToken } from 'utils/sessions/create.ts'
 
 Deno.test('Create access token with correct local session', async () => {
   const locals: any = {}

@@ -4,7 +4,7 @@ import type {
   SessionTokens,
   SessionTypes,
 } from './sessions.ts'
-import type { JWTAlgorithm, JWTVerifyOptions } from './jwt.ts'
+import type { JWTAlgorithm, JWTPayload, JWTVerifyOptions } from './jwt.ts'
 import type { ScopedContext } from '@zanix/server'
 
 /**
@@ -120,4 +120,31 @@ export type OtpFlow = {
     /** Optional configuration for customizing the generated local session */
     sessionTokenOptions: AuthSessionOptions<T>,
   ) => Promise<SessionTokens>
+}
+
+export type SessionFlow = {
+  /**
+   * Generates a pair of session tokens (access and refresh) for a given subject and context.
+   *
+   * @template T extends SessionTypes
+   * @param {AuthSessionOptions<T> & { subject: string; type?: T }} sessionTokens
+   * Options used to generate the session tokens.
+   * @returns {Promise<SessionTokens>} The generated session tokens.
+   */
+  generateTokens: <T extends SessionTypes>(
+    sessionTokens: AuthSessionOptions<T> & { subject: string; type?: T },
+  ) => Promise<SessionTokens>
+  /**
+   * Revokes a session token and returns its decoded payload.
+   *
+   * @param {string} token
+   * The session token to revoke.
+   *
+   * @param {SessionTypes} [type]
+   * Optional session type used to validate or process the token.
+   *
+   * @returns {Promise<JWTPayload>}
+   * A promise that resolves with the revoked token's payload.
+   */
+  revokeToken: (token: string, type?: SessionTypes) => Promise<JWTPayload>
 }

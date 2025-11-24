@@ -54,7 +54,7 @@ export const createJWT = async (
   const { expiration, jwtID, encryptionKey, keyID, algorithm = 'HS256' } = options
 
   // Set expiration if not provided
-  if (expiration) {
+  if (expiration !== undefined) {
     const current = Math.floor(Date.now() / 1000)
     const exp = parseTTL(expiration)
     if (exp <= 0) {
