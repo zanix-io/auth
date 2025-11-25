@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-11-24
+
+### Fixed
+
+- Updated the AuthProvider registration to use a scoped instance instead of the previous lifetime.
+
 ## [0.3.0] - 2025-11-24
 
 ### Changed
