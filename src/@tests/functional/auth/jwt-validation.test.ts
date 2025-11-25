@@ -134,7 +134,7 @@ Deno.test({
 
     context.req.headers.get = (name) => name === 'X-Znx-Authorization' ? `Bearer ${token}` : null
 
-    Deno.env.set('JWK_PUB', publicKey)
+    Deno.env.set('JWK_PUB', btoa(publicKey))
     const { response } = await jwtValidationGuard({ rateLimit: false, type: 'api' })(
       context,
     )

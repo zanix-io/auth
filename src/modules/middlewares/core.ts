@@ -8,18 +8,18 @@
  */
 
 import { sessionHeadersInterceptor } from './headers.interceptor.ts'
-import { defineMiddlewareDecorator } from '@zanix/server'
+import { registerGlobalInterceptor } from '@zanix/server'
 
-/** Middleware DSL definitions */
+/** Global Middleware DSL definitions */
 const registerMiddlewares = () => {
-  defineMiddlewareDecorator('interceptor', sessionHeadersInterceptor())
+  registerGlobalInterceptor(sessionHeadersInterceptor())
 }
 
 /**
  * Auth Core Middlewares loader for Zanix.
  *
  * This module automatically registers the default authentication middlewares
- * It uses the `defineMiddlewareDecorator` function to register the middlewares with the Zanix framework.
+ * It uses the `registerGlobalInterceptor` function to register the middlewares globally with the Zanix framework.
  *
  * This behavior ensures the default authentication middlewares are available without requiring manual setup.
  *

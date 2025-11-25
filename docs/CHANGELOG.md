@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.2] - 2025-11-24
+
+### Fixed
+
+- Correctly decoded RSA JWT keys.
+- Properly registered the headers interceptor.
+
 ## [0.3.1] - 2025-11-24
 
 ### Fixed

@@ -72,9 +72,10 @@ export const createAppToken = async <T extends SessionTypes>(
 ): Promise<string> => {
   const { subject, expiration, type, payload, encryptionKey } = options
 
-  const algorithm = type === 'api' ? 'RS256' : 'HS256'
+  const isRSA = type === 'api'
+  const algorithm = isRSA ? 'RS256' : 'HS256'
+  const keyName = isRSA ? 'JWK_PRI' : 'JWT_KEY'
 
-  const keyName = type === 'user' ? `JWT_KEY` : `JWK_PRI`
   const secret = getRotatingKey(keyName)
 
   if (!secret) {
@@ -93,11 +94,15 @@ export const createAppToken = async <T extends SessionTypes>(
     const aud = payload?.permissions || payload?.aud
     const rateLimit = payload?.rateLimit || 100
 
-    const token = await createJWT({ aud, rateLimit, ...payload, sub: subject }, secret, {
-      expiration,
-      algorithm,
-      encryptionKey,
-    })
+    const token = await createJWT(
+      { aud, rateLimit, ...payload, sub: subject },
+      isRSA ? atob(secret) : secret,
+      {
+        expiration,
+        algorithm,
+        encryptionKey,
+      },
+    )
     return token
   } catch (e) {
     throw new HttpError('BAD_REQUEST', {
@@ -144,7 +149,7 @@ export const createAccessToken = async <T extends SessionTypes>(
 
   if (exp > 3600) {
     throw new InternalError('Access token expiration should not exceed 1 hour', {
-      code: 'ERR_ACCESS_TOKEN_TOO_LONG',
+      code: 'ACCESS_TOKEN_EXP_TOO_LONG',
       meta: {
         source: 'zanix',
         expiration: exp,

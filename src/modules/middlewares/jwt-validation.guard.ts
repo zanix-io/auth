@@ -181,11 +181,12 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
         return { response }
       }
 
+      const isRSA = type === 'api'
       const jwtPayload = await verifyJWT(
         token,
-        secret,
+        isRSA ? atob(secret) : secret,
         {
-          algorithm: algorithm || (type === 'api' ? 'RS256' : 'HS256'),
+          algorithm: algorithm || (isRSA ? 'RS256' : 'HS256'),
           sub: sub || clientSubject || '',
           aud: permissions,
           encryptionKey,
