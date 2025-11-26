@@ -111,7 +111,7 @@ export class GoogleOAuth2Connector extends RestClient {
    * @throws {Error} If the token verification fails or the user information cannot be retrieved.
    */
   public async getUserInfo(token: string): Promise<GoogleUserInfo> {
-    const response = await this.http.get<GoogleUserInfo>(`${ROUTES.userInfo}?alt=json=${token}`, {
+    const response = await this.http.get<GoogleUserInfo>(`${ROUTES.userInfo}?alt=json`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
