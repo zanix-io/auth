@@ -1,7 +1,10 @@
 import type { MiddlewareInterceptor } from '@zanix/server'
 
-import { getClientSubject, getSessionHeaders } from 'utils/sessions/headers.ts'
-import { GENERAL_HEADERS } from 'utils/constants.ts'
+import {
+  checkAcceptedCookies,
+  getClientSubject,
+  getSessionHeaders,
+} from 'utils/sessions/headers.ts'
 
 /**
  * Creates a middleware interceptor that attaches session-related headers
@@ -21,8 +24,14 @@ import { GENERAL_HEADERS } from 'utils/constants.ts'
  *
  * - `x-znx-<type>-session-status:<SessionStatus}>` is added to indicate the session status.
  * - `x-znx-<type>-id` Subject Id header is added when a user token identifier (`sub`) is included.
- * - If `X-Znx-Cookies-Accepted: true` is present, session cookies are sent in the `Set-Cookie` header:
- *   - `x-znx-app-token=<sessionToken>; x-znx-<type>-session-status=<SessionStatus>; x-znx-<type>-id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict`
+ * - If `X-Znx-Cookies-Accepted: true` is present (in headers or cookies), session cookies are sent via
+ *   `Set-Cookie`:
+ *
+ *           - X-Znx-App-Token=<sessionToken>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+ *           - X-Znx-<type>-Session-Status=<SessionStatus>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+ *           - X-Znx-<type>-Id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+ *           - X-Znx-Cookies-Accepted=true; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+ *
  * - `Max-Age` is calculated from the session expiration timestamp minus the current Unix time.
  *
  * @returns {MiddlewareInterceptor}
@@ -30,13 +39,12 @@ import { GENERAL_HEADERS } from 'utils/constants.ts'
  *   session-derived headers.
  */
 export const sessionHeadersInterceptor = (): MiddlewareInterceptor => {
-  const { cookiesAcceptedHeader } = GENERAL_HEADERS
-
   return (ctx, response) => {
     const { locals: { session }, req: { headers }, cookies } = ctx
     if (!session?.type) return response
 
-    const cookiesAccepted = headers.get(cookiesAcceptedHeader) === 'true'
+    const cookiesAccepted = checkAcceptedCookies(headers, cookies)
+
     const { payload, type, subject, status, token } = session
     const authSessionType = type === 'anonymous' ? 'user' : type
 

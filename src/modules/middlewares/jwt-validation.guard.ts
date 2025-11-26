@@ -1,8 +1,7 @@
 import type { JWTValidationOpts } from 'typings/auth.ts'
 import type { SessionStatus } from 'typings/sessions.ts'
 
-import { AUTH_HEADERS, DEFAULT_JWT_ISSUER, GENERAL_HEADERS } from 'utils/constants.ts'
-import { getClientSubject, getDefaultSessionHeaders } from 'utils/sessions/headers.ts'
+import { AUTH_HEADERS, DEFAULT_JWT_ISSUER } from 'utils/constants.ts'
 import { httpErrorResponse, type MiddlewareGlobalGuard } from '@zanix/server'
 import { checkTokenBlockList } from 'utils/sessions/block-list.ts'
 import { defineLocalSession } from 'utils/sessions/context.ts'
@@ -10,6 +9,11 @@ import { HttpError, PermissionDenied } from '@zanix/errors'
 import { rateLimitGuard } from './rate-limit.guard.ts'
 import { decodeJWT } from 'utils/jwt/decode.ts'
 import { verifyJWT } from 'utils/jwt/verify.ts'
+import {
+  checkAcceptedCookies,
+  getClientSubject,
+  getDefaultSessionHeaders,
+} from 'utils/sessions/headers.ts'
 
 /**
  * Creates a JWT validation guard that authenticates incoming requests, verifies the
@@ -45,8 +49,14 @@ import { verifyJWT } from 'utils/jwt/verify.ts'
  * - `x-znx-<type>-session-status:<SessionStatus}>` is added to indicate the session status.
  * - `x-znx-<type>-id` Subject Id header is added when a user token identifier (`sub`) is included.
  * - Rate-limit headers are added when the {@link rateLimitGuard} is executed.
- * - If `X-Znx-Cookies-Accepted: true` is present, session cookies are sent in the `Set-Cookie` header:
- *   - `x-znx-app-token=<sessionToken>; x-znx-<type>-session-status=<SessionStatus>; x-znx-<type>-id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict`
+ * - If `X-Znx-Cookies-Accepted: true` is present (in headers or cookies), session cookies are sent via
+ *   `Set-Cookie`:
+ *
+ *           - X-Znx-App-Token=<sessionToken>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+ *           - X-Znx-<type>-Session-Status=<SessionStatus>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+ *           - X-Znx-<type>-Id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+ *           - X-Znx-Cookies-Accepted=true; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+ *
  * - `Max-Age` is calculated from the session expiration timestamp minus the current Unix time.
  *
  * ## Permissions / Audience Validation
@@ -116,14 +126,14 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
   } = options
 
   const authHeaderKey = AUTH_HEADERS[type]
-  const { cookiesAcceptedHeader } = GENERAL_HEADERS
 
   const rateLimitFn = rateLimitGuard({ anonymousLimit: 0 }) // user must be authenticated
 
   return async (ctx) => {
     const { req: { headers: ctxHeaders }, cookies } = ctx
     const authHeader = ctxHeaders.get(authHeaderKey)
-    const cookiesAccepted = ctxHeaders.get(cookiesAcceptedHeader) === 'true'
+    const cookiesAccepted = checkAcceptedCookies(ctxHeaders, cookies)
+
     const defaultSessionOpts = { type, cookiesAccepted, headers: ctxHeaders, cookies }
     const clientSubject = getClientSubject(ctxHeaders, cookies, type)
 
@@ -229,8 +239,12 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
       const status: SessionStatus = 'active'
 
       // This value is processed in headers interceptor, to add valid session headers.
-      // deno-lint-ignore no-non-null-assertion
-      ctx.locals.session!.status = status
+      ctx.locals.session = {
+        // deno-lint-ignore no-non-null-assertion
+        ...ctx.locals.session!,
+        status,
+        token,
+      }
 
       Object.freeze(ctx.locals.session)
 

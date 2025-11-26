@@ -2,9 +2,11 @@ import type { HandlerContext } from '@zanix/server'
 import type { SessionStatus, SessionTypes } from 'typings/sessions.ts'
 
 import { getAnonymousSessionId } from './anonymous.ts'
-import { SESSION_HEADERS } from 'utils/constants.ts'
+import { GENERAL_HEADERS, SESSION_HEADERS } from 'utils/constants.ts'
 
 type Headers = { 'Set-Cookie': string[] } & { [key: string]: string }
+
+const { cookiesAcceptedHeader } = GENERAL_HEADERS
 
 /**
  * Generates HTTP headers describing the current session state, with optional
@@ -68,8 +70,9 @@ export function getSessionHeaders(options: {
 
     headers['Set-Cookie'].push(`${statusHeader}=${sessionStatus}; ${baseCookie}`)
     headers['Set-Cookie'].push(`${subjectHeader}=${subject}; ${baseCookie}`)
+    headers['Set-Cookie'].push(`${cookiesAcceptedHeader}=true; ${baseCookie}`)
 
-    if (tokenHeader && refreshToken) {
+    if (tokenHeader && refreshToken || maxAge === 0) {
       headers['Set-Cookie'].push(`${tokenHeader}=${refreshToken}; ${baseCookie}`)
     }
   }
@@ -135,4 +138,23 @@ export const getClientSubject = (
   const { sub: subjectHeaderKey } = SESSION_HEADERS[type]
   const userCookie = cookies[subjectHeaderKey]
   return userCookie || headers.get(subjectHeaderKey)
+}
+
+/**
+ * Check If cookies where accepted
+ * @param headers
+ * @param cookies
+ * @returns
+ */
+export const checkAcceptedCookies = (
+  headers: HandlerContext['req']['headers'],
+  cookies: HandlerContext['cookies'],
+) => {
+  const header = headers.get(cookiesAcceptedHeader)
+
+  return header === 'true'
+    ? true
+    : header === 'false'
+    ? false
+    : cookies[cookiesAcceptedHeader] === 'true'
 }

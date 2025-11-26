@@ -198,10 +198,17 @@ When a valid session is present, the following headers may be added to the respo
 
 - `x-znx-<type>-session-status:<SessionStatus>` – indicates the current session status.
 - `x-znx-<type>-id` – subject ID, included when a user token contains a `sub` claim.
-- If `X-Znx-Cookies-Accepted: true` is present, session cookies are sent via `Set-Cookie`:
+- If `X-Znx-Cookies-Accepted: true` is present (in headers or cookies), session cookies are sent via
+  `Set-Cookie`:
 
   ```text
-  x-znx-app-token=<sessionToken>; x-znx-<type>-session-status=<SessionStatus>; x-znx-<type>-id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+  X-Znx-App-Token=<sessionToken>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+
+  X-Znx-<type>-Session-Status=<SessionStatus>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+
+  X-Znx-<type>-Id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+
+  X-Znx-Cookies-Accepted=true; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
   ```
 
 ---

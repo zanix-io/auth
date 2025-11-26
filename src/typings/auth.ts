@@ -130,7 +130,7 @@ export type SessionFlow = {
    * Revokes a session token and returns its decoded payload.
    *
    * @param {string} token
-   * The session token to revoke.
+   * The `refresh` token to revoke.
    *
    * @returns {Promise<JWTPayload>}
    * A promise that resolves with the revoked token's payload.

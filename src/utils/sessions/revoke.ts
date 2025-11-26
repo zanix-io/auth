@@ -26,15 +26,15 @@ import { HttpError } from '@zanix/errors'
  * // Revoke multiple tokens
  * await revokeTokens(["token1", "token2", "token3"])
  */
-export const revokeAppTokens = async (
+export const revokeAppTokens = (
   tokenInfo: string | string[],
   cache: ZanixCacheProvider,
   kvDb?: ZanixKVConnector,
-): Promise<void> => {
-  if (!tokenInfo) return
+): Promise<JWTPayload[]> => {
+  if (!tokenInfo) return Promise.resolve([])
 
   const tokens = Array.isArray(tokenInfo) ? tokenInfo : [tokenInfo]
-  await Promise.all(tokens.map((token) => addTokenToBlockList(token, cache, kvDb)))
+  return Promise.all(tokens.map((token) => addTokenToBlockList(token, cache, kvDb)))
 }
 
 /**
@@ -74,9 +74,9 @@ export const revokeSessionToken = async (
   const { token: tokenHeader } = SESSION_HEADERS['user']
   const { token, cache, kvDb, sessionType = 'user' } = options
 
-  const currentToken = token || ctx.cookies[tokenHeader]
+  const currentRefreshToken = token || ctx.cookies[tokenHeader]
 
-  if (!currentToken) {
+  if (!currentRefreshToken) {
     throw new HttpError('INTERNAL_SERVER_ERROR', {
       code: 'INVALID_TOKEN',
       cause: 'Refresh token is undefined and cannot be used to revoke the session.',
@@ -88,7 +88,11 @@ export const revokeSessionToken = async (
       },
     })
   }
-  const payload = await addTokenToBlockList(currentToken, cache, kvDb)
+
+  const tokens = [currentRefreshToken]
+  if (ctx.session?.token) tokens.push(ctx.session.token)
+
+  const [payload] = await revokeAppTokens(tokens, cache, kvDb)
   defineLocalSession(ctx, {
     payload: { ...payload, exp: 0 },
     type: sessionType,
