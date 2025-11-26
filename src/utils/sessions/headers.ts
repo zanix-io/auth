@@ -4,6 +4,8 @@ import type { SessionStatus, SessionTypes } from 'typings/sessions.ts'
 import { getAnonymousSessionId } from './anonymous.ts'
 import { SESSION_HEADERS } from 'utils/constants.ts'
 
+type Headers = { 'Set-Cookie': string[] } & { [key: string]: string }
+
 /**
  * Generates HTTP headers describing the current session state, with optional
  * cookies when the user has granted cookie consent.
@@ -41,7 +43,7 @@ export function getSessionHeaders(options: {
   cookiesAccepted: boolean
   subject: string
   type: SessionTypes
-}): Record<string, string> {
+}): Headers {
   const {
     cookiesAccepted,
     sessionStatus = 'unconfirmed',
@@ -52,10 +54,11 @@ export function getSessionHeaders(options: {
   } = options
   const { sub: subjectHeader, session: statusHeader, token: tokenHeader } = SESSION_HEADERS[type]
 
-  const headers: Record<string, string> = {
+  const headers = {
+    'Set-Cookie': [],
     [statusHeader]: sessionStatus,
     [subjectHeader]: subject,
-  }
+  } as Headers
 
   if (cookiesAccepted) {
     const nowInSeconds = Math.floor(Date.now() / 1000) // current Unix timestamp
@@ -63,11 +66,11 @@ export function getSessionHeaders(options: {
 
     const baseCookie = `Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Strict`
 
-    headers['Set-Cookie'] = `${statusHeader}=${sessionStatus}; ${baseCookie}`
-    headers['Set-Cookie'] = `${subjectHeader}=${subject}; ${baseCookie}`
+    headers['Set-Cookie'].push(`${statusHeader}=${sessionStatus}; ${baseCookie}`)
+    headers['Set-Cookie'].push(`${subjectHeader}=${subject}; ${baseCookie}`)
 
     if (tokenHeader && refreshToken) {
-      headers['Set-Cookie'] = `${tokenHeader}=${refreshToken}; ${baseCookie}`
+      headers['Set-Cookie'].push(`${tokenHeader}=${refreshToken}; ${baseCookie}`)
     }
   }
 
@@ -103,7 +106,7 @@ export const getDefaultSessionHeaders = async (options: {
   cookies: HandlerContext['cookies']
   type: SessionTypes
   cookiesAccepted: boolean
-}): Promise<Record<string, string>> => {
+}): Promise<Headers> => {
   const { headers, type, cookiesAccepted, sessionStatus, cookies } = options
   const clientSubject = getClientSubject(headers, cookies, type)
   const baseSubject = clientSubject || await getAnonymousSessionId(headers)

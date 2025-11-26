@@ -40,7 +40,7 @@ export const sessionHeadersInterceptor = (): MiddlewareInterceptor => {
     const { payload, type, subject, status, token } = session
     const authSessionType = type === 'anonymous' ? 'user' : type
 
-    const sessionHeaders = getSessionHeaders({
+    const { 'Set-Cookie': sessionCookies, ...sessionHeaders } = getSessionHeaders({
       subject: subject || getClientSubject(headers, cookies, authSessionType) || session.id,
       expiration: payload?.exp,
       sessionStatus: status,
@@ -49,6 +49,9 @@ export const sessionHeadersInterceptor = (): MiddlewareInterceptor => {
       cookiesAccepted,
     })
 
+    for (const cookie of sessionCookies) {
+      response.headers.set('Set-Cookie', cookie)
+    }
     for (const header of Object.entries(sessionHeaders)) {
       response.headers.append(...header)
     }

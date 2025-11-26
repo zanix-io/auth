@@ -34,7 +34,7 @@ Deno.test('jwtValidation shoud return an error wihout session', async () => {
   assertMatch(
     // deno-lint-ignore no-non-null-assertion no-non-null-asserted-optional-chain
     withCookies?.headers.get('set-cookie')!,
-    /X-Znx-User-Session-Status=failed; X-Znx-User-Id=anonymous-/,
+    /X-Znx-User-Session-Status=failed; Max-Age=0; Path=\/; HttpOnly; SameSite=Strict,X-Znx-User-Id=anonymous-[a-z0-9]+; Max-Age=0; Path=\/; HttpOnly; SameSite=Strict/,
   )
 })
 

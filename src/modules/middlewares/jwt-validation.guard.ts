@@ -211,12 +211,15 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
       const { response, headers } = rateLimit ? await rateLimitFn(ctx) : {}
 
       if (response) {
-        const defaultSessionHeaders = await getDefaultSessionHeaders({
+        const { 'Set-Cookie': cookies, ...headers } = await getDefaultSessionHeaders({
           ...defaultSessionOpts,
           sessionStatus: 'blocked',
         })
 
-        for (const header of Object.entries(defaultSessionHeaders)) {
+        for (const cookie of cookies) {
+          response.headers.append('Set-Cookie', cookie)
+        }
+        for (const header of Object.entries(headers)) {
           response.headers.append(...header)
         }
 
