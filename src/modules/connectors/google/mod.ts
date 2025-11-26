@@ -1,4 +1,4 @@
-import type { GoogleTokens, GoogleUserInfo } from 'typings/connectors.ts'
+import type { GoogleUserInfo } from 'typings/connectors.ts'
 import type { SessionTokens } from 'typings/sessions.ts'
 import type { AuthSessionOptions } from 'typings/auth.ts'
 
@@ -9,8 +9,7 @@ import { generateUUID } from '@zanix/helpers'
 const ROUTES = {
   auth: 'https://accounts.google.com/o/oauth2/v2/auth',
   revoke: 'https://oauth2.googleapis.com/revoke',
-  token: 'https://oauth2.googleapis.com/token',
-  tokenInfo: 'https://oauth2.googleapis.com/tokeninfo',
+  userInfo: 'https://www.googleapis.com/oauth2/v1/userinfo',
 }
 
 /**
@@ -86,8 +85,7 @@ export class GoogleOAuth2Connector extends RestClient {
     const params = new URLSearchParams({
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
-      response_type: 'code',
-      access_type: 'offline',
+      response_type: 'token',
       include_granted_scopes: 'true',
       prompt: 'consent',
       scope,
@@ -98,38 +96,26 @@ export class GoogleOAuth2Connector extends RestClient {
   }
 
   /**
-   * Exchanges an authorization code for access, refresh, and ID tokens.
+   * Verifies a Google OAuth token and retrieves the associated user information.
    *
-   * @param {string} code - The authorization code returned by Google's OAuth2 redirect.
+   * This method sends a request to the Google API to fetch user details, such as their profile
+   * information, based on the provided access token.
    *
-   * @returns {Promise<GoogleTokens>} A promise resolving to Google OAuth2 tokens.
+   * @param {string} token - The Google OAuth 2.0 access token to be verified.
+   * The token should be a valid bearer token obtained from Google's OAuth 2.0 authentication flow.
+   *
+   * @returns {Promise<GoogleUserInfo>} A promise that resolves with the user information
+   * retrieved from Google, such as email, name, and profile details.
+   * If the token is invalid or expired, the promise will be rejected with an error.
+   *
+   * @throws {Error} If the token verification fails or the user information cannot be retrieved.
    */
-  public async getTokens(code: string): Promise<GoogleTokens> {
-    const response = await this.http.post<GoogleTokens>(ROUTES.token, {
+  public async getUserInfo(token: string): Promise<GoogleUserInfo> {
+    const response = await this.http.get<GoogleUserInfo>(`${ROUTES.userInfo}?alt=json=${token}`, {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Bearer ${token}`,
       },
-      body: new URLSearchParams({
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        grant_type: 'authorization_code',
-        redirect_uri: encodeURIComponent(this.redirectUri),
-        code,
-      }),
     })
-
-    return response
-  }
-
-  /**
-   * Verifies and decodes a Google ID token using Google's token verification endpoint.
-   *
-   * @param {string} idToken - The ID token to verify.
-   *
-   * @returns {Promise<GoogleUserInfo>} A promise resolving to user information extracted from the ID token.
-   */
-  public async verifyIdToken(idToken: string): Promise<GoogleUserInfo> {
-    const response = await this.http.get<GoogleUserInfo>(`${ROUTES.tokenInfo}?id_token=${idToken}`)
 
     return response
   }
@@ -151,61 +137,51 @@ export class GoogleOAuth2Connector extends RestClient {
 
     return true
   }
-
   /**
    * Performs the full Google OAuth2 authentication flow and initializes
    * the local session for the authenticated user.
    *
-   * This convenience method:
-   *  1. Exchanges the received Google authorization code for OAuth2 tokens.
-   *  2. Verifies and decodes the ID token to obtain user information.
-   *  3. Creates local access and refresh session tokens based on the provided
-   *     configuration or sensible defaults.
+   * This method handles the entire authentication process by:
+   *  1. Exchanging the received Google authorization code for OAuth2 tokens (access, refresh, and ID tokens).
+   *  2. Verifying and decoding the ID token to extract user profile information (e.g., email, name).
+   *  3. Creating local session tokens (access and refresh tokens) for the authenticated user,
+   *     using either the provided configuration or default settings.
    *
    * @template T extends SessionTypes
    *
-   * @param {string} code
-   *   The authorization code returned by Google's OAuth2 redirect.
+   * @param {string} token - The authorization code returned by Google after user authentication.
+   *   This code is used to request OAuth2 tokens from Google's token endpoint.
    *
-   * @param {ScopedContext} ctx
-   *   The scoped request context in which the local session user info
-   *   will be stored.
+   * @param {ScopedContext} ctx - The scoped request context where user session data will be stored.
+   *   Typically, this contains the user's session and other related context for the current request.
    *
-   * @param {AuthSessionOptions} [sessionOptions={}]
-   *   Optional configuration for customizing the generated local session
-   *   tokens (e.g., `rateLimit` or `permissions`).
+   * @param {AuthSessionOptions} [sessionOptions={}] - Optional configuration object for customizing session token creation.
+   *   For example, this can include rate limiting, custom permissions, or other session-related settings.
    *
-   * @returns {Promise<{
-   *    tokens: GoogleTokens,
-   *    user: GoogleUserInfo,
-   *    sessionTokens: SessionTokens
-   * }>}
-   *   Resolves with:
-   *   - `tokens`: The raw Google OAuth2 tokens (access, refresh, and ID token).
-   *   - `user`: The verified and decoded user profile extracted from the ID token.
-   *   - `sessionTokens`: The newly generated local access and refresh tokens along
-   *     with the effective subject.
+   * @returns {Promise<{ user: GoogleUserInfo, sessionTokens: SessionTokens }>}
+   *   A promise that resolves with an object containing:
+   *   - `user`: The user's profile information retrieved and decoded from the Google ID token (e.g., email, name, profile picture).
+   *   - `sessionTokens`: The newly generated local session tokens, including access and refresh tokens, along with the authenticated user's subject (usually the user's email).
    *
    * @throws {Error}
-   *   Throws if token exchange fails, ID token validation fails, or if session
-   *   creation encounters an unexpected error.
+   *   Throws if the following errors occur:
+   *   - Token exchange fails (e.g., invalid or expired authorization code).
+   *   - ID token validation fails (e.g., invalid or malformed ID token).
+   *   - Session creation encounters an error (e.g., invalid session options or unexpected issues with token generation).
    */
   public async authenticate(
-    code: string,
     ctx: ScopedContext,
+    token: string,
     sessionOptions?: AuthSessionOptions,
   ): Promise<{
-    tokens: GoogleTokens
     user: GoogleUserInfo
     session: SessionTokens
   }> {
-    const tokens = await this.getTokens(code)
-    const user = await this.verifyIdToken(tokens.id_token)
+    const user = await this.getUserInfo(token)
 
     const session = await generateSessionTokens(ctx, { subject: user.email, ...sessionOptions })
 
     return {
-      tokens,
       user,
       session,
     }

@@ -150,7 +150,7 @@ export type SessionFlow = {
   ) => Promise<SessionTokens & { oldToken: string; payload: JWTPayload }>
 }
 
-export type OAuthFlow<T, U> = {
+export type OAuthFlow<U> = {
   /**
    * Generates the OAuth URL.
    *
@@ -158,25 +158,25 @@ export type OAuthFlow<T, U> = {
    */
   generateAuthUrl: () => string
   /**
-   * Performs the full OAuth2 authentication flow and initializes
+   * Performs the full OAuth flow and initializes
    * the local session for the authenticated user.
    *
-   * @param {string} code
-   *   The authorization code returned by Google's OAuth2 redirect.
-   *
-   * @param {ScopedContext} ctx
-   *   The scoped request context in which the local session user info
-   *   will be stored.
+   * @param {string} token
+   *   The OAuth token received after user login.
    *
    * @param {AuthSessionOptions} [sessionOptions={}]
-   *   Optional configuration for customizing the generated local session
-   *   tokens (e.g., `rateLimit` or `permissions`).
+   *   Optional configuration object used to customize locally generated session tokens,
+   *   such as rate limiting, permissions, or subject.
+   *
+   * @returns {Promise<{ user: U, session: SessionTokens }>}
+   *   Resolves with an object containing:
+   *   - `user`: The authenticated user information extracted from the verified ID token.
+   *   - `session`: The generated local session tokens (access + refresh) associated with the user.
    */
   authenticate: (
-    code: string,
+    token: string,
     sessionOptions?: AuthSessionOptions,
   ) => Promise<{
-    tokens: T
     user: U
     session: SessionTokens
   }>

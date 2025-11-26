@@ -1,25 +1,17 @@
 import type { GoogleOAuth2Connector } from 'modules/connectors/google/mod.ts'
 
-export interface GoogleTokens {
-  // deno-lint-ignore camelcase
-  access_token: string
-  // deno-lint-ignore camelcase
-  id_token: string
-  // deno-lint-ignore camelcase
-  refresh_token?: string
-  // deno-lint-ignore camelcase
-  expires_in: number
-  // deno-lint-ignore camelcase
-  token_type: string
-}
-
 export interface GoogleUserInfo {
-  sub: string
+  id: string
   email: string
   // deno-lint-ignore camelcase
-  email_verified: boolean
-  name?: string
-  picture?: string
+  verified_email: boolean
+  name: string
+  // deno-lint-ignore camelcase
+  given_name: string
+  // deno-lint-ignore camelcase
+  family_name: string
+  picture: string
+  hd: string
 }
 
 export type AuthConnectors = {

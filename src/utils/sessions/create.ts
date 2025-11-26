@@ -1,4 +1,4 @@
-import type { ScopedContext } from '@zanix/server'
+import type { ScopedContext, ZanixCacheProvider, ZanixKVConnector } from '@zanix/server'
 import type { AuthSessionOptions } from 'typings/auth.ts'
 import type { JWTPayload } from 'typings/jwt.ts'
 import type {
@@ -10,13 +10,14 @@ import type {
 } from 'typings/sessions.ts'
 
 import { getRotatingKey } from 'utils/jwt/keys-rotation.ts'
-import { HttpError, InternalError } from '@zanix/errors'
+import { HttpError, InternalError, PermissionDenied } from '@zanix/errors'
 import { SESSION_HEADERS } from 'utils/constants.ts'
 import { defineLocalSession } from './context.ts'
 import { createJWT } from 'utils/jwt/create.ts'
 import { decodeJWT } from 'utils/jwt/decode.ts'
 import { verifyJWT } from '../jwt/verify.ts'
 import { parseTTL } from '@zanix/helpers'
+import { checkTokenBlockList } from './block-list.ts'
 
 /** Get JWT secret */
 const getSecret = (type: SessionTypes) => {
@@ -269,19 +270,26 @@ export const generateSessionTokens = async (
  *   Optional JWT whose payload will be decoded to refresh the session.
  *   If omitted, the token will be retrieved from the current context, provided cookies are available.
  *
+ * @param options - Options for check block list validation
+ * @param {ZanixCacheProvider} [options.cache] - Cache provider.
+ * @param {ZanixKVConnector} [options.kvDb] - Key-value store connector.
  * @returns {Promise<SessionTokens & { oldToken: string, payload: JWTPayload }>>}
  *   A promise that resolves with the newly generated session tokens and de older one.
  */
 export const refreshSessionTokens = async (
   ctx: ScopedContext,
   token?: string,
+  options: {
+    cache?: ZanixCacheProvider
+    kvDb?: ZanixKVConnector
+  } = {},
 ): Promise<SessionTokens & { oldToken: string; payload: JWTPayload }> => {
   const { token: tokenHeader } = SESSION_HEADERS['user']
   const secret = getSecret('user')
 
-  const currentToken = token || ctx.cookies[tokenHeader]
+  const currentRefreshToken = token || ctx.cookies[tokenHeader]
 
-  if (!currentToken) {
+  if (!currentRefreshToken) {
     throw new HttpError('INTERNAL_SERVER_ERROR', {
       code: 'INVALID_TOKEN',
       cause: 'Refresh token is undefined and cannot be used to refresh the session.',
@@ -294,9 +302,22 @@ export const refreshSessionTokens = async (
     })
   }
 
-  const payload = await verifyJWT(currentToken, secret)
+  const payload = await verifyJWT(currentRefreshToken, secret)
+
+  // check token in block list
+  if (options.cache && options.kvDb) {
+    const isInBlockList = await checkTokenBlockList(
+      payload.jti,
+      options.cache,
+      options.kvDb,
+    )
+
+    if (isInBlockList) {
+      throw new PermissionDenied('The refresh token has been revoked or is blocklisted.')
+    }
+  }
 
   const tokens = await generateSessionTokens(ctx, payload.access)
 
-  return { ...tokens, oldToken: currentToken, payload }
+  return { ...tokens, oldToken: currentRefreshToken, payload }
 }

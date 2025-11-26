@@ -1,10 +1,5 @@
+import type { AuthConnectors, CoreAuthConnectors, GoogleUserInfo } from 'typings/connectors.ts'
 import type { OAuthFlow, OtpFlow, SessionFlow } from 'typings/auth.ts'
-import type {
-  AuthConnectors,
-  CoreAuthConnectors,
-  GoogleTokens,
-  GoogleUserInfo,
-} from 'typings/connectors.ts'
 
 import { ZanixProvider } from '@zanix/server'
 import { authConnectors } from '../connectors/mod.ts'
@@ -40,7 +35,7 @@ export class ZanixAuthProvider extends ZanixProvider {
    * const user = await authProvider.google.authenticate(code);
    * ```
    */
-  public google: OAuthFlow<GoogleTokens, GoogleUserInfo> = google.call(this)
+  public google: OAuthFlow<GoogleUserInfo> = google.call(this)
 
   /**
    * One-Time Password (OTP) authentication connector.
