@@ -113,7 +113,7 @@ export class GoogleOAuth2Connector extends RestClient {
         client_id: this.clientId,
         client_secret: this.clientSecret,
         grant_type: 'authorization_code',
-        redirect_uri: this.redirectUri,
+        redirect_uri: encodeURIComponent(this.redirectUri),
         code,
       }),
     })
@@ -174,7 +174,7 @@ export class GoogleOAuth2Connector extends RestClient {
    * @param {AuthSessionOptions} [sessionOptions={}]
    *   Optional configuration for customizing the generated local session
    *   tokens (e.g., `rateLimit` or `permissions`).
-
+   *
    * @returns {Promise<{
    *    tokens: GoogleTokens,
    *    user: GoogleUserInfo,

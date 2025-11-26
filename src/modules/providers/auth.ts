@@ -1,10 +1,16 @@
-import type { AuthConnectors, CoreAuthConnectors } from 'typings/connectors.ts'
-import type { OtpFlow, SessionFlow } from 'typings/auth.ts'
+import type { OAuthFlow, OtpFlow, SessionFlow } from 'typings/auth.ts'
+import type {
+  AuthConnectors,
+  CoreAuthConnectors,
+  GoogleTokens,
+  GoogleUserInfo,
+} from 'typings/connectors.ts'
 
 import { ZanixProvider } from '@zanix/server'
 import { authConnectors } from '../connectors/mod.ts'
 import { session } from './extensions/session.ts'
 import { otp } from './extensions/otp.ts'
+import { google } from './extensions/google.ts'
 
 /**
  * ZanixAuthProvider is the default authentication provider implementation for the Zanix framework.
@@ -29,16 +35,12 @@ export class ZanixAuthProvider extends ZanixProvider {
    * Provides methods for handling Google sign-in flows, exchanging authorization codes,
    * and verifying ID tokens.
    *
-   * @type {AuthConnectors['google-oauth2']}
-   *
    * @example
    * ```ts
    * const user = await authProvider.google.authenticate(code);
    * ```
    */
-  public get google(): AuthConnectors['google-oauth2'] {
-    return this.use('google-oauth2')
-  }
+  public google: OAuthFlow<GoogleTokens, GoogleUserInfo> = google.call(this)
 
   /**
    * One-Time Password (OTP) authentication connector.

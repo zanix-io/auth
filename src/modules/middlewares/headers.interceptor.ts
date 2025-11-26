@@ -50,7 +50,7 @@ export const sessionHeadersInterceptor = (): MiddlewareInterceptor => {
     })
 
     for (const cookie of sessionCookies) {
-      response.headers.set('Set-Cookie', cookie)
+      response.headers.append('Set-Cookie', cookie)
     }
     for (const header of Object.entries(sessionHeaders)) {
       response.headers.append(...header)
