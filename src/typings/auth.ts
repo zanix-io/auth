@@ -1,9 +1,4 @@
-import type {
-  AccessTokenOptions,
-  RefreshTokenOptions,
-  SessionTokens,
-  SessionTypes,
-} from './sessions.ts'
+import type { AppTokenBaseAccess, SessionTokens, SessionTypes } from './sessions.ts'
 import type { JWTAlgorithm, JWTPayload, JWTVerifyOptions } from './jwt.ts'
 import type { ScopedContext } from '@zanix/server'
 
@@ -61,12 +56,12 @@ export type GenerateOTPOptions = {
   length?: number
 }
 
-export type AuthSessionOptions<T extends SessionTypes> = {
-  /** Session access token */
-  access?: Partial<AccessTokenOptions<T>>
-  /** Session refresh token */
-  refresh?: Partial<RefreshTokenOptions<T>>
-}
+export type AuthSessionOptions = {
+  /** User or API Id. */
+  subject: string
+  /** Optional extra data to save in access token's payload */
+  payload?: Record<string, unknown>
+} & AppTokenBaseAccess
 
 export type OtpFlow = {
   /**
@@ -102,7 +97,7 @@ export type OtpFlow = {
    * Performs the full OTP authentication flow and initializes
    * the local session for the authenticated user.
    */
-  authenticate: <T extends SessionTypes>(
+  authenticate: (
     /**
      * The scoped request context in which the local session user info
      * will be stored.
@@ -118,7 +113,7 @@ export type OtpFlow = {
      */
     code: string,
     /** Optional configuration for customizing the generated local session */
-    sessionTokenOptions: AuthSessionOptions<T>,
+    sessionOptions: AuthSessionOptions,
   ) => Promise<SessionTokens>
 }
 
@@ -126,25 +121,29 @@ export type SessionFlow = {
   /**
    * Generates a pair of session tokens (access and refresh) for a given subject and context.
    *
-   * @template T extends SessionTypes
-   * @param {AuthSessionOptions<T> & { subject: string; type?: T }} sessionTokens
+   * @param {AuthSessionOptions} options
    * Options used to generate the session tokens.
    * @returns {Promise<SessionTokens>} The generated session tokens.
    */
-  generateTokens: <T extends SessionTypes>(
-    sessionTokens: AuthSessionOptions<T> & { subject: string; type?: T },
-  ) => Promise<SessionTokens>
+  generateTokens: (options: AuthSessionOptions) => Promise<SessionTokens>
   /**
    * Revokes a session token and returns its decoded payload.
    *
    * @param {string} token
    * The session token to revoke.
    *
-   * @param {SessionTypes} [type]
-   * Optional session type used to validate or process the token.
-   *
    * @returns {Promise<JWTPayload>}
    * A promise that resolves with the revoked token's payload.
    */
-  revokeToken: (token: string, type?: SessionTypes) => Promise<JWTPayload>
+  revokeToken: (token?: string) => Promise<JWTPayload>
+
+  /**
+   * Refreshes the session tokens using the provided JWT.
+   *
+   * @param {string} token
+   * The session refresh token.
+   *
+   * @returns {Promise<SessionTokens>} The generated session tokens.
+   */
+  refreshTokens: (token?: string) => Promise<SessionTokens>
 }

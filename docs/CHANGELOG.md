@@ -7,6 +7,17 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.3] - 2025-11-25
+
+### Fixed
+
+- Fixed injection issue in the Google OAuth connector.
+
+### Added
+
+- Integrated cookie handling.
+- Added support for refresh tokens in user sessions.
+
 ## [0.3.2] - 2025-11-24
 
 ### Fixed

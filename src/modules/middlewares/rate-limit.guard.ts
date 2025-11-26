@@ -74,24 +74,26 @@ export const rateLimitGuard = (
 
   return async (ctx) => {
     const { req: { headers }, locals: { session } } = ctx
-    if (!session?.rateLimit && !anonymousLimit) {
+    const sessionRateLimit = session?.rateLimit
+    if (!sessionRateLimit && !anonymousLimit) {
       throw new HttpError('UNAUTHORIZED', {
         message: 'Access to this resource is not allowed.',
         meta: {
           source: 'zanix',
           method: 'rateLimitGuard',
           requestId: ctx.id,
-          reason: !session?.rateLimit
+          reason: !sessionRateLimit
             ? 'No session found with a valid rate limit configuration.'
             : 'Anonymous users are not permitted',
         },
       })
     }
 
-    ctx.locals.session = session ||
-      await generateAnonymousSession(anonymousLimit as number, headers)
+    ctx.locals.session = sessionRateLimit
+      ? session
+      : await generateAnonymousSession(anonymousLimit as number, headers)
 
-    Object.freeze(ctx.locals.session)
+    Object.freeze(ctx.locals.session.rateLimit)
 
     const { id: sessionId, type: sessionType, rateLimit } = ctx.locals.session
 

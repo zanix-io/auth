@@ -24,10 +24,12 @@ export const SESSION_HEADERS = {
   api: {
     sub: 'X-Znx-Api-Id',
     session: 'X-Znx-Api-Session-Status',
+    token: undefined,
   },
   user: {
     sub: 'X-Znx-User-Id',
     session: 'X-Znx-User-Session-Status',
+    token: 'X-Znx-App-Token',
   },
 }
 

@@ -190,13 +190,8 @@ Deno.test('jwtValidation shoud return an error due token subject', async () => {
   const token = await createJWT({ sub: 'my-id', aud: 'admin' }, 'my-secret')
   Deno.env.set('JWT_KEY', 'my-secret')
   context.req.headers.get = (name) =>
-    name === 'Authorization'
-      ? `Bearer ${token}`
-      : name === 'X-Znx-User-Id'
-      ? 'user-id'
-      : name === 'Cookie'
-      ? 'X-Znx-User-Id=user-cookie'
-      : null
+    name === 'Authorization' ? `Bearer ${token}` : name === 'X-Znx-User-Id' ? 'user-id' : null
+  context.cookies = { 'X-Znx-User-Id': 'user-cookie' }
 
   const { response } = await jwtValidationGuard({
     iss: 'zanix-auth',

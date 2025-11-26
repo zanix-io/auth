@@ -24,6 +24,7 @@ export const contextMock: () => HandlerContext & {
   connectors: ProgramModule.getConnectors(),
   interactors: null as any,
   locals: {},
+  cookies: {},
 } as unknown as HandlerContext & {
   interactors: any
   providers: any

@@ -10,8 +10,7 @@ export function otp(this: ZanixAuthProvider): OtpFlow {
   return {
     generate: (options) => generateOTP(this.cache, options),
     verify: (target, code) => verifyOTP(this.cache, target, code),
-    authenticate: async (ctx, target, code, sessionTokenOptions): Promise<SessionTokens> => {
-      const { access, refresh } = sessionTokenOptions
+    authenticate: async (ctx, target, code, options): Promise<SessionTokens> => {
       const isValid = await verifyOTP(this.cache, target, code)
 
       if (!isValid) {
@@ -26,7 +25,7 @@ export function otp(this: ZanixAuthProvider): OtpFlow {
         })
       }
 
-      return generateSessionTokens(ctx, { access, refresh, subject: target })
+      return generateSessionTokens(ctx, { ...options, subject: target })
     },
   }
 }

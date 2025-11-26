@@ -201,7 +201,7 @@ When a valid session is present, the following headers may be added to the respo
 - If `X-Znx-Cookies-Accepted: true` is present, session cookies are sent via `Set-Cookie`:
 
   ```text
-  x-znx-<type>-session-status=<SessionStatus>; x-znx-<type>-id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+  x-znx-app-token=<sessionToken>; x-znx-<type>-session-status=<SessionStatus>; x-znx-<type>-id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
   ```
 
 ---

@@ -1,20 +1,42 @@
-import type { HandlerContext, ScopedContext } from '@zanix/server'
+import type { ScopedContext } from '@zanix/server'
 import type { AuthSessionOptions } from 'typings/auth.ts'
 import type { JWTPayload } from 'typings/jwt.ts'
 import type {
   AccessTokenOptions,
   AppTokenOptions,
   RefreshTokenOptions,
-  SessionStatus,
   SessionTokens,
   SessionTypes,
 } from 'typings/sessions.ts'
 
 import { getRotatingKey } from 'utils/jwt/keys-rotation.ts'
 import { HttpError, InternalError } from '@zanix/errors'
+import { SESSION_HEADERS } from 'utils/constants.ts'
+import { defineLocalSession } from './context.ts'
 import { createJWT } from 'utils/jwt/create.ts'
-import { parseTTL } from '@zanix/helpers'
 import { decodeJWT } from 'utils/jwt/decode.ts'
+import { verifyJWT } from '../jwt/verify.ts'
+import { parseTTL } from '@zanix/helpers'
+
+/** Get JWT secret */
+const getSecret = (type: SessionTypes) => {
+  const isRSA = type === 'api'
+  const keyName = isRSA ? 'JWK_PRI' : 'JWT_KEY'
+
+  const secret = getRotatingKey(keyName)
+
+  if (secret) return secret
+
+  throw new InternalError(`An error occurred while creating the ${type} session.`, {
+    cause: `Missing required JWT key in environment variables: ${keyName}.`,
+    meta: {
+      source: 'zanix',
+      method: 'getJWTKey',
+      keyType: type,
+      keyName: keyName,
+    },
+  })
+}
 
 /**
  * Creates a signed app JWT token for a given user or API subject.
@@ -74,28 +96,17 @@ export const createAppToken = async <T extends SessionTypes>(
 
   const isRSA = type === 'api'
   const algorithm = isRSA ? 'RS256' : 'HS256'
-  const keyName = isRSA ? 'JWK_PRI' : 'JWT_KEY'
 
-  const secret = getRotatingKey(keyName)
-
-  if (!secret) {
-    throw new InternalError(`An error occurred while creating the ${type} session.`, {
-      cause: `Missing required JWT key in environment variables: ${keyName}.`,
-      meta: {
-        source: 'zanix',
-        method: 'getJWTKey',
-        keyType: type,
-        keyName: keyName,
-      },
-    })
-  }
+  const secret = getSecret(type)
 
   try {
     const aud = payload?.permissions || payload?.aud
     const rateLimit = payload?.rateLimit || 100
 
+    delete payload?.permissions
+
     const token = await createJWT(
-      { aud, rateLimit, ...payload, sub: subject },
+      { ...payload, aud, rateLimit, sub: subject },
       isRSA ? atob(secret) : secret,
       {
         expiration,
@@ -105,7 +116,7 @@ export const createAppToken = async <T extends SessionTypes>(
     )
     return token
   } catch (e) {
-    throw new HttpError('BAD_REQUEST', {
+    throw new HttpError('INTERNAL_SERVER_ERROR', {
       message: `An error occurred while creating the ${type} session token.`,
       cause: e,
       meta: {
@@ -160,7 +171,7 @@ export const createAccessToken = async <T extends SessionTypes>(
   const token = await createAppToken(options)
   const { payload } = decodeJWT(token)
 
-  localSessionDefinition(ctx, { type: options.type, payload, status: 'active' })
+  defineLocalSession(ctx, { type: options.type, payload, status: 'active' })
 
   return token
 }
@@ -192,59 +203,51 @@ export const createRefreshToken = <T extends SessionTypes>(
 }
 
 /**
- * Generates a pair of session tokens (access and refresh) for a given subject and context.
- *
- * @template T - The session type, extending `SessionTypes` (e.g., 'user', 'admin', etc.).
+ * Generates a pair of session tokens (access and refresh) for a given user and context.
  *
  * @param {ScopedContext} ctx - The scoped request context in which the access token will be created.
- * @param {AuthSessionOptions<T> & { subject: string; type?: T }} sessionTokens
+ * @param {AuthSessionOptions} options
  *   Configuration for the session tokens:
  *   - `subject`: The identifier (e.g., user email or ID) for which the tokens are generated.
- *   - `type`: Optional type of session, defaults to `'user'`.
- *   - `access`: Optional custom configuration for the access token.
- *   - `refresh`: Optional custom configuration for the refresh token.
+ *   - `rateLimit`: Optional custom configuration for the token rate limit. Defaults to `100`
+ *   - `permissions`: Optional custom configuration for the token aud.
  *
- * @returns {Promise<{
- *   accessToken: string;
- *   refreshToken: string;
- *   subject: string;
- * }>} A promise resolving to an object containing:
+ * @returns {Promise<{ accessToken: string; refreshToken: string;}>}
+ * A promise resolving to an object containing:
  *   - `accessToken`: The generated access token.
  *   - `refreshToken`: The generated refresh token.
- *   - `subject`: The subject for whom the tokens were generated.
  *
  * @example
  * ```ts
  * const tokens = await generateSessionTokens(ctx, {
  *   subject: 'user@example.com',
- *   type: 'user',
- *   access: { expiration: '2h' },
- *   refresh: { expiration: '30d' },
  * });
  *
  * console.log(tokens.accessToken); // JWT access token
  * console.log(tokens.refreshToken); // JWT refresh token
  * ```
  */
-export const generateSessionTokens = async <T extends SessionTypes>(
+export const generateSessionTokens = async (
   ctx: ScopedContext,
-  sessionTokens: AuthSessionOptions<T> & { subject: string; type?: T },
+  options: AuthSessionOptions,
 ): Promise<SessionTokens> => {
-  const { access, refresh, subject, type = 'user' as T } = sessionTokens
+  const { subject, rateLimit, permissions, payload } = options
 
-  const sessionAccessToken = await createAccessToken<T>(ctx, {
+  const sessionAccessToken = await createAccessToken(ctx, {
     expiration: '1h',
     subject,
-    type,
-    ...access,
+    type: 'user',
+    payload: { ...payload, permissions, rateLimit },
   })
 
-  const sessionRefreshToken = await createRefreshToken<T>({
+  const sessionRefreshToken = await createRefreshToken({
     expiration: '1y',
     subject,
-    type,
-    ...refresh,
+    type: 'user',
+    payload: { access: options },
   })
+
+  Object.assign(ctx.locals.session as object, { token: sessionRefreshToken })
 
   return {
     accessToken: sessionAccessToken,
@@ -253,34 +256,47 @@ export const generateSessionTokens = async <T extends SessionTypes>(
 }
 
 /**
- * Assigns a session object to the `locals` of the given context.
+ * Refreshes the session tokens using the provided JWT.
  *
- * Extracts relevant fields from the provided JWT payload and stores
- * them as a structured session in `context.locals.session`.
+ * Decodes the given token to extract its payload and generates a new
+ * set of session tokens based on the existing access data.
  *
- * This allows middlewares, handlers, or extensions to access
- * the session during the lifetime of the request.
+ * @param {ScopedContext} ctx
+ *   The scoped context containing configuration and services required
+ *   for token generation.
  *
- * @param context - The current request context, either a `HandlerContext` or a `ScopedContext`.
- * @param {SessionTypes} options.type - The type of session being created (from `SessionTypes`).
- * @param {JWTPayload} options.payload - The JWT payload containing session information.
- * @param {SessionStatus} [options.status] - The optional session status.
+ * @param {string} [token]
+ *   Optional JWT whose payload will be decoded to refresh the session.
+ *   If omitted, the token will be retrieved from the current context, provided cookies are available.
+ *
+ * @returns {Promise<SessionTokens & { oldToken: string, payload: JWTPayload }>>}
+ *   A promise that resolves with the newly generated session tokens and de older one.
  */
-export const localSessionDefinition = (
-  context: HandlerContext | ScopedContext,
-  options: { type: SessionTypes; payload: JWTPayload; status?: SessionStatus },
-) => {
-  const { type, payload, status } = options
-  const { jti, rateLimit: trl, sub: subject, aud, ...rest } = payload
+export const refreshSessionTokens = async (
+  ctx: ScopedContext,
+  token?: string,
+): Promise<SessionTokens & { oldToken: string; payload: JWTPayload }> => {
+  const { token: tokenHeader } = SESSION_HEADERS['user']
+  const secret = getSecret('user')
 
-  // Assign a session to the context
-  context.locals.session = {
-    type,
-    id: jti,
-    rateLimit: trl,
-    scope: typeof aud === 'string' ? [aud] : aud,
-    payload: rest,
-    subject,
-    status,
+  const currentToken = token || ctx.cookies[tokenHeader]
+
+  if (!currentToken) {
+    throw new HttpError('INTERNAL_SERVER_ERROR', {
+      code: 'INVALID_TOKEN',
+      cause: 'Refresh token is undefined and cannot be used to refresh the session.',
+      meta: {
+        source: 'zanix',
+        method: 'refreshSessionTokens',
+        suggestion:
+          'Provide a valid token to this method or ensure that the required cookies are available.',
+      },
+    })
   }
+
+  const payload = await verifyJWT(currentToken, secret)
+
+  const tokens = await generateSessionTokens(ctx, payload.access)
+
+  return { ...tokens, oldToken: currentToken, payload }
 }

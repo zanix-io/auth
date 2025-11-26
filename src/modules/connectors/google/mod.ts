@@ -1,5 +1,5 @@
 import type { GoogleTokens, GoogleUserInfo } from 'typings/connectors.ts'
-import type { SessionTokens, SessionTypes } from 'typings/sessions.ts'
+import type { SessionTokens } from 'typings/sessions.ts'
 import type { AuthSessionOptions } from 'typings/auth.ts'
 
 import { generateSessionTokens } from 'utils/sessions/create.ts'
@@ -171,13 +171,10 @@ export class GoogleOAuth2Connector extends RestClient {
    *   The scoped request context in which the local session user info
    *   will be stored.
    *
-   * @param {GoogleAuthSessionOptions<T>} [sessionTokenOptions={}]
+   * @param {AuthSessionOptions} [sessionOptions={}]
    *   Optional configuration for customizing the generated local session
-   *   tokens (e.g., expiration, `type`, or `subject`).
-   *   Defaults:
-   *   - `type`: `"user"`
-   *   - `subject`: decoded email from the Google ID token
-   *
+   *   tokens (e.g., `rateLimit` or `permissions`).
+
    * @returns {Promise<{
    *    tokens: GoogleTokens,
    *    user: GoogleUserInfo,
@@ -193,20 +190,19 @@ export class GoogleOAuth2Connector extends RestClient {
    *   Throws if token exchange fails, ID token validation fails, or if session
    *   creation encounters an unexpected error.
    */
-  public async authenticate<T extends SessionTypes>(
+  public async authenticate(
     code: string,
     ctx: ScopedContext,
-    sessionTokenOptions: AuthSessionOptions<T> = {},
+    sessionOptions?: AuthSessionOptions,
   ): Promise<{
     tokens: GoogleTokens
     user: GoogleUserInfo
     session: SessionTokens
   }> {
-    const { access, refresh } = sessionTokenOptions
     const tokens = await this.getTokens(code)
     const user = await this.verifyIdToken(tokens.id_token)
 
-    const session = await generateSessionTokens(ctx, { access, refresh, subject: user.email })
+    const session = await generateSessionTokens(ctx, { subject: user.email, ...sessionOptions })
 
     return {
       tokens,

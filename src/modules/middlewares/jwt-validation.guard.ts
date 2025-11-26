@@ -5,7 +5,7 @@ import { AUTH_HEADERS, DEFAULT_JWT_ISSUER, GENERAL_HEADERS } from 'utils/constan
 import { getClientSubject, getDefaultSessionHeaders } from 'utils/sessions/headers.ts'
 import { httpErrorResponse, type MiddlewareGlobalGuard } from '@zanix/server'
 import { checkTokenBlockList } from 'utils/sessions/block-list.ts'
-import { localSessionDefinition } from 'utils/sessions/create.ts'
+import { defineLocalSession } from 'utils/sessions/context.ts'
 import { HttpError, PermissionDenied } from '@zanix/errors'
 import { rateLimitGuard } from './rate-limit.guard.ts'
 import { decodeJWT } from 'utils/jwt/decode.ts'
@@ -46,7 +46,7 @@ import { verifyJWT } from 'utils/jwt/verify.ts'
  * - `x-znx-<type>-id` Subject Id header is added when a user token identifier (`sub`) is included.
  * - Rate-limit headers are added when the {@link rateLimitGuard} is executed.
  * - If `X-Znx-Cookies-Accepted: true` is present, session cookies are sent in the `Set-Cookie` header:
- *   - `x-znx-<type>-session-status=<SessionStatus>; x-znx-<type>-id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict`
+ *   - `x-znx-app-token=<sessionToken>; x-znx-<type>-session-status=<SessionStatus>; x-znx-<type>-id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict`
  * - `Max-Age` is calculated from the session expiration timestamp minus the current Unix time.
  *
  * ## Permissions / Audience Validation
@@ -121,11 +121,11 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
   const rateLimitFn = rateLimitGuard({ anonymousLimit: 0 }) // user must be authenticated
 
   return async (ctx) => {
-    const { req: { headers: ctxHeaders } } = ctx
+    const { req: { headers: ctxHeaders }, cookies } = ctx
     const authHeader = ctxHeaders.get(authHeaderKey)
     const cookiesAccepted = ctxHeaders.get(cookiesAcceptedHeader) === 'true'
-    const defaultSessionOpts = { type, cookiesAccepted, headers: ctxHeaders }
-    const clientSubject = getClientSubject(ctxHeaders, type)
+    const defaultSessionOpts = { type, cookiesAccepted, headers: ctxHeaders, cookies }
+    const clientSubject = getClientSubject(ctxHeaders, cookies, type)
 
     const token = authHeader?.slice(7).trim()
     // deno-lint-ignore no-non-null-assertion
@@ -205,7 +205,7 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
       }
 
       // Assign a session to the context
-      localSessionDefinition(ctx, { type, payload: jwtPayload })
+      defineLocalSession(ctx, { type, payload: jwtPayload })
 
       // Rate limit validation
       const { response, headers } = rateLimit ? await rateLimitFn(ctx) : {}

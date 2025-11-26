@@ -7,6 +7,8 @@
  * \_____/ \__,_||_| |_||_|/_/\_\
  */
 
+import { SESSION_HEADERS } from 'utils/constants.ts'
+
 // Connectors & Providers
 export { GoogleOAuth2Connector } from 'modules/connectors/google/mod.ts'
 export { ZanixAuthProvider } from 'modules/providers/auth.ts'
@@ -38,6 +40,14 @@ export {
 // Utils
 export { scopeValidation } from 'utils/scope.ts'
 export { generateOTP, verifyOTP } from 'utils/otp.ts'
+/**
+ * Represents the main session/auth headers for a user context.
+ */
+export const userSessionHeaders = SESSION_HEADERS['user']
+/**
+ * Represents the main session/auth headers for API requests in a user context.
+ */
+export const apiSessionHeaders = SESSION_HEADERS['user']
 
 // Middlewares
 export { sessionHeadersInterceptor } from 'modules/middlewares/headers.interceptor.ts'

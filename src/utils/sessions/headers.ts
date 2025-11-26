@@ -2,8 +2,7 @@ import type { HandlerContext } from '@zanix/server'
 import type { SessionStatus, SessionTypes } from 'typings/sessions.ts'
 
 import { getAnonymousSessionId } from './anonymous.ts'
-import { SESSION_HEADERS } from '../constants.ts'
-import { getCookies } from '@std/http'
+import { SESSION_HEADERS } from 'utils/constants.ts'
 
 /**
  * Generates HTTP headers describing the current session state, with optional
@@ -38,6 +37,7 @@ import { getCookies } from '@std/http'
 export function getSessionHeaders(options: {
   sessionStatus?: SessionStatus
   expiration?: number
+  refreshToken?: string
   cookiesAccepted: boolean
   subject: string
   type: SessionTypes
@@ -45,11 +45,12 @@ export function getSessionHeaders(options: {
   const {
     cookiesAccepted,
     sessionStatus = 'unconfirmed',
+    refreshToken,
     type,
     subject,
     expiration = 0,
   } = options
-  const { sub: subjectHeader, session: statusHeader } = SESSION_HEADERS[type]
+  const { sub: subjectHeader, session: statusHeader, token: tokenHeader } = SESSION_HEADERS[type]
 
   const headers: Record<string, string> = {
     [statusHeader]: sessionStatus,
@@ -59,8 +60,15 @@ export function getSessionHeaders(options: {
   if (cookiesAccepted) {
     const nowInSeconds = Math.floor(Date.now() / 1000) // current Unix timestamp
     const maxAge = Math.max(0, Math.floor(expiration - nowInSeconds))
-    headers['Set-Cookie'] =
-      `${statusHeader}=${sessionStatus}; ${subjectHeader}=${subject}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Strict`
+
+    const baseCookie = `Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Strict`
+
+    headers['Set-Cookie'] = `${statusHeader}=${sessionStatus}; ${baseCookie}`
+    headers['Set-Cookie'] = `${subjectHeader}=${subject}; ${baseCookie}`
+
+    if (tokenHeader && refreshToken) {
+      headers['Set-Cookie'] = `${tokenHeader}=${refreshToken}; ${baseCookie}`
+    }
   }
 
   return headers
@@ -77,6 +85,7 @@ export function getSessionHeaders(options: {
  * @param {Object} options - The options for generating the session headers.
  * @param {SessionStatus} [options.sessionStatus] - Optional session status to include in the headers.
  * @param {HandlerContext['req']['headers']} options.headers - The HTTP request headers from which to extract client information.
+ * @param {HandlerContext['cookies']} options.cookies - The request cookies.
  * @param {SessionTypes} options.type - The type of session, used to determine the appropriate header/cookie keys.
  * @param {boolean} options.cookiesAccepted - Whether cookies are accepted by the client, affecting header generation.
  * @returns {Promise<Record<string, string>>} A promise that resolves to an object containing the default session headers.
@@ -91,11 +100,12 @@ export function getSessionHeaders(options: {
 export const getDefaultSessionHeaders = async (options: {
   sessionStatus?: SessionStatus
   headers: HandlerContext['req']['headers']
+  cookies: HandlerContext['cookies']
   type: SessionTypes
   cookiesAccepted: boolean
 }): Promise<Record<string, string>> => {
-  const { headers, type, cookiesAccepted, sessionStatus } = options
-  const clientSubject = getClientSubject(headers, type)
+  const { headers, type, cookiesAccepted, sessionStatus, cookies } = options
+  const clientSubject = getClientSubject(headers, cookies, type)
   const baseSubject = clientSubject || await getAnonymousSessionId(headers)
   return getSessionHeaders({ cookiesAccepted, type, sessionStatus, subject: baseSubject })
 }
@@ -107,6 +117,7 @@ export const getDefaultSessionHeaders = async (options: {
  * if the cookie is not present. It is used to identify the client associated with a session.
  *
  * @param {HandlerContext['req']['headers']} headers - The request headers from which to extract the subject.
+ * @param {HandlerContext['cookies']} cookies - The request cookies.
  * @param {SessionTypes} type - The type of session, which determines the specific header/cookie key to use.
  * @returns {string | undefined} The subject value from the cookie or header, or `undefined` if not found.
  *
@@ -115,9 +126,10 @@ export const getDefaultSessionHeaders = async (options: {
  */
 export const getClientSubject = (
   headers: HandlerContext['req']['headers'],
+  cookies: HandlerContext['cookies'],
   type: SessionTypes,
 ): string | null => {
   const { sub: subjectHeaderKey } = SESSION_HEADERS[type]
-  const userCookie = getCookies(headers)[subjectHeaderKey]
+  const userCookie = cookies[subjectHeaderKey]
   return userCookie || headers.get(subjectHeaderKey)
 }

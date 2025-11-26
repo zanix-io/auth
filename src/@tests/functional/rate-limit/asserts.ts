@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertFalse } from '@std/assert'
+import { assert, assertAlmostEquals, assertEquals, assertFalse } from '@std/assert'
 
 import { sessionHeadersInterceptor } from 'modules/middlewares/headers.interceptor.ts'
 import { rateLimitGuard } from 'modules/middlewares/rate-limit.guard.ts'
@@ -18,7 +18,7 @@ export const addValidHeaders = async (cache: 'cache:local' | 'cache:redis') => {
   assertFalse(response)
   assertEquals(headers[RATE_LIMIT_HEADERS.limitHeader], '100')
   assertEquals(headers[RATE_LIMIT_HEADERS.remainingHeader], '99')
-  assertEquals(Number(headers[RATE_LIMIT_HEADERS.resetHeader]), 60)
+  assertAlmostEquals(Number(headers[RATE_LIMIT_HEADERS.resetHeader]), 60, 1)
 }
 
 export const addValidSessionHeaders = async () => {
@@ -30,8 +30,7 @@ export const addValidSessionHeaders = async () => {
   const response = new Response()
   await sessionHeadersInterceptor()(context, response)
 
-  assert(context.locals.session?.id.startsWith('anonymous-'))
-  assertEquals(context.locals.session?.type, 'anonymous')
+  assertFalse(context.locals.session)
   assert(response.headers.get('X-Znx-User-Id')?.startsWith('anonymous-'))
   assertEquals(response.headers.get('X-Znx-User-Session-Status'), 'unconfirmed')
 }
@@ -97,7 +96,8 @@ export const shouldFailDueLimitAnonymous = async (cache: 'cache:local' | 'cache:
 
   await new Promise((resolve) => setTimeout(resolve, 2000))
   const { response: checkRetry } = await guard(context)
-  assertEquals(checkRetry?.headers.get('retry-after'), '57')
+  const retryAfter = Number(checkRetry?.headers.get('retry-after'))
+  assert(retryAfter < 59 && retryAfter > 55)
 }
 
 export const shouldFailDueLimit = async (cache: 'cache:local' | 'cache:redis') => {

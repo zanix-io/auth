@@ -14,8 +14,7 @@ import { Connector } from '@zanix/server'
 const registerConnector = () => {
   if (!Deno.env.get('GOOGLE_OAUTH2_CLIENT_ID')) return
 
-  @Connector({ startMode: 'lazy', autoInitialize: false })
-  class _ZanixGOAuthCoreConnector extends GoogleOAuth2Connector {}
+  Connector({ startMode: 'lazy', autoInitialize: false })(GoogleOAuth2Connector)
 }
 
 /**

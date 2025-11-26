@@ -48,6 +48,35 @@ export type SessionStatus = 'active' | 'failed' | 'unconfirmed' | 'blocked' | 'r
  */
 export type SessionTypes = 'user' | 'api'
 
+export type AppTokenBaseAccess = {
+  /** Permissions required to access the protected resource.
+   * Can be roles, scopes, permissions, or audience claims.
+   * This can be a single string or an array of strings.
+   * For example, `['admin', 'write:user']`.
+   */
+  permissions?: JWTPayload['aud']
+  /**
+   * Number of request per rate limit, or rate limit plan index. Defaults to `100`.
+   *
+   * Rate limiting can be configured using the following environment variables:
+   *
+   * - `RATE_LIMIT_WINDOW_SECONDS`: Specifies the time window (in seconds) for rate limiting.
+   * - `RATE_LIMIT_PLANS`: Defines rate limit plans in the format `'index:maxRequests'`. For example:
+   *   `RATE_LIMIT_PLANS='0:100;1:1000;2:3000'`
+   *
+   * When `RATE_LIMIT_PLANS` is defined:
+   *   - The session's `rateLimit` value will be treated as an index to match the corresponding plan.
+   *   - For example, if `session.rateLimit` is `0`, it will allow 100 requests per `RATE_LIMIT_WINDOW_SECONDS`.
+   *   - If `session.rateLimit` is `1`, it will allow 1000 requests per the same time window.
+   *
+   * If `RATE_LIMIT_PLANS` is not defined, or if `session.rateLimit` does not match any index in the plan:
+   *   - The `session.rateLimit` will directly represent the number of requests allowed per `RATE_LIMIT_WINDOW_SECONDS`.
+   *
+   * This configuration allows for dynamic rate limiting, where the `session.rateLimit` can either reference a plan index or directly set the limit, depending on the configuration.
+   */
+  rateLimit?: number
+}
+
 export type AppTokenOptions<T extends SessionTypes> = {
   /** User or API Id. */
   subject: string
@@ -59,34 +88,7 @@ export type AppTokenOptions<T extends SessionTypes> = {
   /**
    * The JWT data payload.
    */
-  payload?: Omit<Partial<JWTPayload>, 'sub' | 'exp' | 'jit'> & {
-    /** Permissions required to access the protected resource.
-     * Can be roles, scopes, permissions, or audience claims.
-     * This can be a single string or an array of strings.
-     * For example, `['admin', 'write:user']`.
-     */
-    permissions?: JWTPayload['aud']
-    /**
-     * Number of request per rate limit, or rate limit plan index. Defaults to `100`.
-     *
-     * Rate limiting can be configured using the following environment variables:
-     *
-     * - `RATE_LIMIT_WINDOW_SECONDS`: Specifies the time window (in seconds) for rate limiting.
-     * - `RATE_LIMIT_PLANS`: Defines rate limit plans in the format `'index:maxRequests'`. For example:
-     *   `RATE_LIMIT_PLANS='0:100;1:1000;2:3000'`
-     *
-     * When `RATE_LIMIT_PLANS` is defined:
-     *   - The session's `rateLimit` value will be treated as an index to match the corresponding plan.
-     *   - For example, if `session.rateLimit` is `0`, it will allow 100 requests per `RATE_LIMIT_WINDOW_SECONDS`.
-     *   - If `session.rateLimit` is `1`, it will allow 1000 requests per the same time window.
-     *
-     * If `RATE_LIMIT_PLANS` is not defined, or if `session.rateLimit` does not match any index in the plan:
-     *   - The `session.rateLimit` will directly represent the number of requests allowed per `RATE_LIMIT_WINDOW_SECONDS`.
-     *
-     * This configuration allows for dynamic rate limiting, where the `session.rateLimit` can either reference a plan index or directly set the limit, depending on the configuration.
-     */
-    rateLimit?: number
-  }
+  payload?: Omit<Partial<JWTPayload>, 'sub' | 'exp' | 'jit'> & AppTokenBaseAccess
 
   /**
    * Session types.

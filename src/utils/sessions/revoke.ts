@@ -3,7 +3,9 @@ import type { SessionTypes } from 'typings/sessions.ts'
 import type { JWTPayload } from 'typings/jwt.ts'
 
 import { addTokenToBlockList } from 'utils/sessions/block-list.ts'
-import { localSessionDefinition } from 'utils/sessions/create.ts'
+import { defineLocalSession } from 'utils/sessions/context.ts'
+import { SESSION_HEADERS } from 'utils/constants.ts'
+import { HttpError } from '@zanix/errors'
 
 /**
  * Revokes one or multiple app token to the block list.
@@ -36,7 +38,7 @@ export const revokeAppTokens = async (
 }
 
 /**
- * Revokes a session and its associated token.
+ * Revokes a session and its associated refresh token.
  *
  * Adds the provided token to a blocklist (cache and optionally KV store)
  * to prevent further use, and assigns a revoked session to the context.
@@ -46,14 +48,15 @@ export const revokeAppTokens = async (
  *
  * @param ctx - The current request context (`ScopedContext`) where the revoked session will be stored.
  * @param options - Configuration options for revoking the token.
- * @param options.token - The token string to be revoked.
+ * @param {string} [options.token] - Optional JWT to be revoked.
+ *               If omitted, the token will be retrieved from the current context, provided cookies are available.
  * @param options.cache - Cache provider used to store the token blocklist.
  * @param options.kvDb - Optional KV connector to persist the token blocklist.
  * @param options.sessionType - Optional session type (default: `"user"`) to mark in the context.
  *
  * @example
  * await revokeSessionToken(context, {
- *   token: accessToken,
+ *   token: refreshToken,
  *   cache: cacheProvider,
  *   kvDb: kvConnector,
  *   sessionType: "user",
@@ -62,15 +65,31 @@ export const revokeAppTokens = async (
 export const revokeSessionToken = async (
   ctx: ScopedContext,
   options: {
-    token: string
+    token?: string
     cache: ZanixCacheProvider
     kvDb?: ZanixKVConnector
     sessionType?: SessionTypes
   },
 ): Promise<JWTPayload> => {
+  const { token: tokenHeader } = SESSION_HEADERS['user']
   const { token, cache, kvDb, sessionType = 'user' } = options
-  const payload = await addTokenToBlockList(token, cache, kvDb)
-  localSessionDefinition(ctx, {
+
+  const currentToken = token || ctx.cookies[tokenHeader]
+
+  if (!currentToken) {
+    throw new HttpError('INTERNAL_SERVER_ERROR', {
+      code: 'INVALID_TOKEN',
+      cause: 'Refresh token is undefined and cannot be used to revoke the session.',
+      meta: {
+        source: 'zanix',
+        method: 'revokeSessionToken',
+        suggestion:
+          'Provide a valid token to this method or ensure that the required cookies are available.',
+      },
+    })
+  }
+  const payload = await addTokenToBlockList(currentToken, cache, kvDb)
+  defineLocalSession(ctx, {
     payload: { ...payload, exp: 0 },
     type: sessionType,
     status: 'revoked',

@@ -69,6 +69,7 @@ Deno.test(
     const apiHeaders = await getDefaultSessionHeaders(
       {
         headers: { get: (name: string) => name === 'X-Znx-User-Id' ? 'my-user' : null } as never,
+        cookies: {},
         type: 'api',
         cookiesAccepted: false,
       },
@@ -80,6 +81,7 @@ Deno.test(
     const userHeaders = await getDefaultSessionHeaders(
       {
         headers: { get: (name: string) => name === 'X-Znx-Api-Id' ? 'my-user' : null } as never,
+        cookies: {},
         type: 'user',
         cookiesAccepted: false,
       },
@@ -94,6 +96,7 @@ Deno.test('getDefaultSessionHeaders returns default headers with cookies', async
   const apiHeaders = await getDefaultSessionHeaders(
     {
       headers: { get: (name: string) => name === 'X-Znx-Api-Id' ? 'my-api' : null } as never,
+      cookies: {},
       type: 'api',
       cookiesAccepted: true,
     },
@@ -107,9 +110,8 @@ Deno.test('getDefaultSessionHeaders returns default headers with cookies', async
 
   const userHeaders = await getDefaultSessionHeaders(
     {
-      headers: {
-        get: (name: string) => name === 'Cookie' ? 'X-Znx-User-Id=my-user;' : null,
-      } as never,
+      headers: { get: () => null } as never,
+      cookies: { 'X-Znx-User-Id': 'my-user' },
       type: 'user',
       cookiesAccepted: true,
     },
