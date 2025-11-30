@@ -150,9 +150,13 @@ export type OAuthFlow<U> = {
   /**
    * Generates the OAuth URL.
    *
+   * @param {string} [options.state] - A random string to maintain state between request and callback.
+   *                           Defaults to a newly generated UUID.
+   * @param {string} [options.scope] - OAuth scopes to request.
+   *
    * @returns {string} The complete OAuth URL.
    */
-  generateAuthUrl: () => string
+  generateAuthUrl: (options?: { state?: string; scope?: string }) => { url: string; state: string }
   /**
    * Verifies a OAuth token and retrieves the associated user information.
    *

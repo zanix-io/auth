@@ -4,7 +4,7 @@ import type { OAuthFlow } from 'typings/auth.ts'
 
 export function google(this: ZanixAuthProvider): OAuthFlow<GoogleUserInfo> {
   return {
-    generateAuthUrl: () => this.use('google-oauth2').generateAuthUrl(),
+    generateAuthUrl: (options) => this.use('google-oauth2').generateAuthUrl(options),
     validateToken: (token) => this.use('google-oauth2').getUserInfo(token),
     authenticate: (token, sessionOptions) =>
       this.use('google-oauth2').authenticate(this.context, token, sessionOptions),

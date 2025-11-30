@@ -72,16 +72,16 @@ export class GoogleOAuth2Connector extends RestClient {
   /**
    * Generates the Google OAuth2 authorization URL.
    *
-   * @param {string} [state] - A random string to maintain state between request and callback.
+   * @param {string} [options.state] - A random string to maintain state between request and callback.
    *                           Defaults to a newly generated UUID.
-   * @param {string} [scope='openid email profile'] - OAuth2 scopes to request.
+   * @param {string} [options.scope='openid email profile'] - OAuth2 scopes to request.
    *
    * @returns {string} The complete Google OAuth2 authorization URL.
    */
   public generateAuthUrl(
-    state: string = generateUUID(),
-    scope: string = 'openid email profile',
-  ): string {
+    options: { state?: string; scope?: string } = {},
+  ): { url: string; state: string } {
+    const { state = generateUUID(), scope = 'openid email profile' } = options
     const params = new URLSearchParams({
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
@@ -92,7 +92,7 @@ export class GoogleOAuth2Connector extends RestClient {
       state,
     })
 
-    return `${ROUTES.auth}?${params.toString()}`
+    return { url: `${ROUTES.auth}?${params.toString()}`, state }
   }
 
   /**
