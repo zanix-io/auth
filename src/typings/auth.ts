@@ -109,7 +109,7 @@ export type OtpFlow = {
      */
     code: string,
     /** Optional configuration for customizing the generated local session */
-    sessionOptions: Partial<AuthSessionOptions>,
+    sessionOptions?: Partial<AuthSessionOptions>,
   ) => Promise<SessionTokens>
 }
 
@@ -153,6 +153,12 @@ export type OAuthFlow<U> = {
    * @returns {string} The complete OAuth URL.
    */
   generateAuthUrl: () => string
+  /**
+   * Verifies a OAuth token and retrieves the associated user information.
+   *
+   * @returns { Promise<U>} The associated user information.
+   */
+  validateToken: (token: string) => Promise<U>
   /**
    * Performs the full OAuth flow and initializes
    * the local session for the authenticated user.
