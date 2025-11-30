@@ -112,9 +112,7 @@ export class GoogleOAuth2Connector extends RestClient {
    */
   public async getUserInfo(token: string): Promise<GoogleUserInfo> {
     const response = await this.http.get<GoogleUserInfo>(`${ROUTES.userInfo}?alt=json`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
+      headers: { 'Authorization': `Bearer ${token}` },
     })
 
     return response
@@ -172,7 +170,7 @@ export class GoogleOAuth2Connector extends RestClient {
   public async authenticate(
     ctx: ScopedContext,
     token: string,
-    sessionOptions?: AuthSessionOptions,
+    sessionOptions?: Partial<AuthSessionOptions>,
   ): Promise<{
     user: GoogleUserInfo
     session: SessionTokens

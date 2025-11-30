@@ -232,13 +232,13 @@ export const generateSessionTokens = async (
   ctx: ScopedContext,
   options: AuthSessionOptions,
 ): Promise<SessionTokens> => {
-  const { subject, rateLimit, permissions, payload } = options
+  const { subject, id, rateLimit, permissions, payload } = options
 
   const sessionAccessToken = await createAccessToken(ctx, {
     expiration: '1h',
     subject,
     type: 'user',
-    payload: { ...payload, permissions, rateLimit },
+    payload: { ...payload, jit: id || payload?.jit, permissions, rateLimit },
   })
 
   const sessionRefreshToken = await createRefreshToken({

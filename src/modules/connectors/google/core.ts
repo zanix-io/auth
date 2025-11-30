@@ -12,7 +12,7 @@ import { Connector } from '@zanix/server'
 
 /** Connector DSL definition */
 const registerConnector = () => {
-  if (!Deno.env.get('GOOGLE_OAUTH2_CLIENT_ID')) return
+  if (!Deno.env.has('GOOGLE_OAUTH2_CLIENT_ID')) return
 
   Connector({ startMode: 'lazy', autoInitialize: false })(GoogleOAuth2Connector)
 }

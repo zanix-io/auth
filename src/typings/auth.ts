@@ -1,6 +1,5 @@
 import type { AppTokenBaseAccess, SessionTokens, SessionTypes } from './sessions.ts'
 import type { JWTAlgorithm, JWTPayload, JWTVerifyOptions } from './jwt.ts'
-import type { ScopedContext } from '@zanix/server'
 
 /**
  * Configuration options for JWT validation.
@@ -45,7 +44,7 @@ export type GenerateOTPOptions = {
 
   /**
    * Expiration time of the generated OTP, in seconds.
-   * Optional; defaults to a system-defined value if not provided.
+   * Optional; defaults to `300` seconds if not provided.
    */
   exp?: number
 
@@ -59,6 +58,8 @@ export type GenerateOTPOptions = {
 export type AuthSessionOptions = {
   /** User or API Id. */
   subject: string
+  /** Session Id */
+  id?: string
   /** Optional extra data to save in access token's payload */
   payload?: Record<string, unknown>
 } & AppTokenBaseAccess
@@ -99,11 +100,6 @@ export type OtpFlow = {
    */
   authenticate: (
     /**
-     * The scoped request context in which the local session user info
-     * will be stored.
-     */
-    ctx: ScopedContext,
-    /**
      * Target identifier for the OTP delivery.
      * Typically an email address or phone number.
      */
@@ -113,7 +109,7 @@ export type OtpFlow = {
      */
     code: string,
     /** Optional configuration for customizing the generated local session */
-    sessionOptions: AuthSessionOptions,
+    sessionOptions: Partial<AuthSessionOptions>,
   ) => Promise<SessionTokens>
 }
 
@@ -175,7 +171,7 @@ export type OAuthFlow<U> = {
    */
   authenticate: (
     token: string,
-    sessionOptions?: AuthSessionOptions,
+    sessionOptions?: Partial<AuthSessionOptions>,
   ) => Promise<{
     user: U
     session: SessionTokens
