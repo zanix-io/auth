@@ -33,7 +33,7 @@ Deno.test({
   fn: async () => {
     const context = await initialize()
 
-    const token = await createJWT({}, 'my-secret')
+    const token = await createJWT({ exp: Math.floor(Date.now() / 1000) + 1 }, 'my-secret')
 
     context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 

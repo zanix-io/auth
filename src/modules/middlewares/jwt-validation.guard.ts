@@ -7,7 +7,8 @@ import { checkTokenBlockList } from 'utils/sessions/block-list.ts'
 import { defineLocalSession } from 'utils/sessions/context.ts'
 import { HttpError, PermissionDenied } from '@zanix/errors'
 import { rateLimitGuard } from './rate-limit.guard.ts'
-import { decodeJWT } from 'utils/jwt/decode.ts'
+
+import { getSecretByToken } from 'utils/jwt/secrets.ts'
 import { verifyJWT } from 'utils/jwt/verify.ts'
 import {
   checkAcceptedCookies,
@@ -162,33 +163,17 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
     }
 
     try {
-      const { header: { kid } } = decodeJWT(token)
+      let secret: string
 
-      const keySuffix = kid ? `_${kid}` : ''
-
-      const keyName = type === 'user' ? `JWT_KEY${keySuffix}` : `JWK_PUB${keySuffix}`
-      const secret = Deno.env.get(keyName)
-
-      if (!secret) {
+      try {
+        secret = getSecretByToken(token, type)
+      } catch (e) {
         const headers = await getDefaultSessionHeaders({
           ...defaultSessionOpts,
           sessionStatus: 'failed',
         })
-        const response = httpErrorResponse(
-          new HttpError('INTERNAL_SERVER_ERROR', {
-            message: `An error occurred during ${type} authentication.`,
-            cause: `Missing required JWT key in environment variables: ${keyName}.`,
-            meta: {
-              source: 'zanix',
-              method: 'getJWTKey',
-              keyType: type,
-              keyName: keyName,
-            },
-          }),
-          { headers, contextId: ctx.id },
-        )
-
-        return { response }
+        if (e instanceof PermissionDenied) throw e
+        return { response: httpErrorResponse(e, { headers, contextId: ctx.id }) }
       }
 
       const isRSA = type === 'api'

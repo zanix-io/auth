@@ -1,9 +1,12 @@
 import { isNumberString } from '@zanix/validator'
 import { parseTTL } from '@zanix/helpers'
 
-export const jwtKeys: { 'JWT_KEY': Map<number, string>; 'JWK_PRI': Map<number, string> } = {
-  JWT_KEY: new Map<number, string>(),
-  JWK_PRI: new Map<number, string>(),
+export const jwtKeys: {
+  'JWT_KEY': Map<number, { value: string; version: `V${number}` }>
+  'JWK_PRI': Map<number, { value: string; version: `V${number}` }>
+} = {
+  JWT_KEY: new Map<number, { value: string; version: `V${number}` }>(),
+  JWK_PRI: new Map<number, { value: string; version: `V${number}` }>(),
 }
 
 /**
@@ -11,18 +14,21 @@ export const jwtKeys: { 'JWT_KEY': Map<number, string>; 'JWK_PRI': Map<number, s
  * Versioned keys follow the pattern `${PREFIX}_V1`, `${PREFIX}_V2`, ...
  *
  * @param {'JWT_KEY' | 'JWK_PRI'} prefix - The environment variable prefix.
- * @returns { Map<number, string>} Ordered list of versioned key values found in the environment.
+ * @returns { Map<number, { value: string; version: `V${number}` }>} Ordered list of versioned key values found in the environment.
  */
-function getVersionedKeys(prefix: 'JWT_KEY' | 'JWK_PRI'): Map<number, string> {
+function getVersionedKeys(
+  prefix: 'JWT_KEY' | 'JWK_PRI',
+): Map<number, { value: string; version: `V${number}` }> {
   const jwks = jwtKeys[prefix]
   if (jwks.size) return jwks
 
   let index = 0
   while (true) {
-    const envKey = `${prefix}_V${index + 1}`
+    const version = `V${index + 1}` as const
+    const envKey = `${prefix}_${version}`
     const value = Deno.env.get(envKey)
     if (!value) break
-    jwks.set(index, value)
+    jwks.set(index, { value, version })
     index++
   }
 
@@ -77,17 +83,17 @@ function getActiveVersionIndex(cycleSeconds: number, total: number): number {
  */
 export function getRotatingKey(
   prefix: 'JWT_KEY' | 'JWK_PRI',
-): string | undefined {
+): { value?: string; version?: `V${number}` } {
   const versions = getVersionedKeys(prefix)
 
   // No versions → fallback to base key
   if (versions.size === 0) {
     const base = Deno.env.get(prefix)
-    return base
+    return { value: base }
   }
 
   const cycleSeconds = getRotationCycle()
   const idx = getActiveVersionIndex(cycleSeconds, versions.size)
-
-  return versions.get(idx)
+  // deno-lint-ignore no-non-null-assertion
+  return versions.get(idx)!
 }

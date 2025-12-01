@@ -18,15 +18,16 @@ import { decodeJWT } from 'utils/jwt/decode.ts'
 import { verifyJWT } from '../jwt/verify.ts'
 import { parseTTL } from '@zanix/helpers'
 import { checkTokenBlockList } from './block-list.ts'
+import { getSecretByToken } from '../jwt/secrets.ts'
 
 /** Get JWT secret */
-const getSecret = (type: SessionTypes) => {
+const getCurrentSecret = (type: SessionTypes): { value: string; version?: `V${number}` } => {
   const isRSA = type === 'api'
   const keyName = isRSA ? 'JWK_PRI' : 'JWT_KEY'
 
   const secret = getRotatingKey(keyName)
 
-  if (secret) return secret
+  if (secret.value) return { ...secret, value: secret.value }
 
   throw new InternalError(`An error occurred while creating the ${type} session.`, {
     cause: `Missing required JWT key in environment variables: ${keyName}.`,
@@ -98,7 +99,7 @@ export const createAppToken = async <T extends SessionTypes>(
   const isRSA = type === 'api'
   const algorithm = isRSA ? 'RS256' : 'HS256'
 
-  const secret = getSecret(type)
+  const { value: secret, version } = getCurrentSecret(type)
 
   try {
     const aud = payload?.permissions || payload?.aud
@@ -110,6 +111,7 @@ export const createAppToken = async <T extends SessionTypes>(
       { ...payload, aud, rateLimit, sub: subject },
       isRSA ? atob(secret) : secret,
       {
+        keyID: version,
         expiration,
         algorithm,
         encryptionKey,
@@ -285,9 +287,9 @@ export const refreshSessionTokens = async (
   } = {},
 ): Promise<SessionTokens & { oldToken: string; payload: JWTPayload }> => {
   const { token: tokenHeader } = SESSION_HEADERS['user']
-  const secret = getSecret('user')
 
   const currentRefreshToken = token || ctx.cookies[tokenHeader]
+  const secret = getSecretByToken(currentRefreshToken)
 
   if (!currentRefreshToken) {
     throw new HttpError('INTERNAL_SERVER_ERROR', {

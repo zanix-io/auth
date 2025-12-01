@@ -74,17 +74,23 @@ export async function addTokenToBlockList(
   const { payload } = decodeJWT(token)
   const { jti, exp } = payload
 
+  let ttl = exp
+  if (exp !== undefined) {
+    ttl = exp - Math.floor(Date.now() / 1000)
+    if (ttl <= 0) return payload // already expired, should not be available
+  }
+
   const key = `${CACHE_KEYS.jwtBlockList}:${jti}`
   if (Deno.env.has('REDIS_URI')) {
-    await cache.saveToCaches({ provider: 'redis', key, value: true, exp })
+    await cache.saveToCaches({ provider: 'redis', key, value: true, exp: ttl })
   } else {
     logger.warn(
       'The JWT blocklist system is currently using the KV local storage backend. ' +
         'For distributed systems, it is recommended to enable Redis by setting the REDIS_URI environment variable.',
       'noSave',
     )
-    cache.local.set(key, true, { exp })
-    kvDb?.set(key, true, exp)
+    cache.local.set(key, true, { exp: ttl })
+    kvDb?.set(key, true, ttl)
   }
 
   return payload

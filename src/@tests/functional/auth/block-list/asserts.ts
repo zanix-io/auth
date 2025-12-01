@@ -12,7 +12,7 @@ export const asserts = async () => {
   const cache = ProgramModule.getProviders().get<ZanixCacheProvider>('cache')
 
   Deno.env.set('JWT_KEY', 'my-secret')
-  const token = await createJWT({ exp: 1 }, 'my-secret')
+  const token = await createJWT({ exp: Math.floor(Date.now() / 1000) + 1 }, 'my-secret') // Expired in 1 second
   const payload = await addTokenToBlockList(token, cache, localDb)
   const isBlocked = await checkTokenBlockList(payload.jti, cache, localDb)
   assert(isBlocked)

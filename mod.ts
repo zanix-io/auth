@@ -19,6 +19,7 @@ export type { JWT, JWTHeader, JWTPayload } from 'typings/jwt.ts'
 
 export { createJWT } from 'utils/jwt/create.ts'
 export { verifyJWT } from 'utils/jwt/verify.ts'
+export { decodeJWT } from 'utils/jwt/decode.ts'
 
 // Block List
 export { addTokenToBlockList, checkTokenBlockList } from 'utils/sessions/block-list.ts'
@@ -40,6 +41,8 @@ export {
 // Utils
 export { scopeValidation } from 'utils/scope.ts'
 export { generateOTP, verifyOTP } from 'utils/otp.ts'
+export { getSecretByToken } from 'utils/jwt/secrets.ts'
+
 /**
  * Represents the main session/auth headers for a user context.
  */

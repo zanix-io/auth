@@ -7,6 +7,18 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.11] - 2025-11-30
+
+### Fixed
+
+- Fixed JWT key rotation issue.
+- Fixed blocklist expiration time handling.
+
+### Changed
+
+-Added default iss to JWT generation and verification, using the provided issuer or falling back to
+the default.
+
 ## [0.3.3] - 2025-11-25
 
 ### Fixed

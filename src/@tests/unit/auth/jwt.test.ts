@@ -73,7 +73,7 @@ Deno.test('Create JWT test case HMAC-SHA256 with aud and iss', async () => {
   assertEquals(audError.meta?.tokenAudience, 'my-aud')
 
   const subError = await assertRejects(
-    () => verifyJWT(jwt, secret, { sub: 'my-sub' }),
+    () => verifyJWT(jwt, secret, { sub: 'my-sub', iss: payload.iss }),
     PermissionDenied,
   )
   assertEquals(subError.code, 'INVALID_TOKEN_SUBJECT')
@@ -106,8 +106,9 @@ Deno.test('Create JWT test case HMAC-SHA256 with expiration', async () => {
 
 Deno.test('Create JWT test case RS256', async () => {
   const { publicKey, privateKey } = await generateRSAKeys()
+  const myIss = 'my-iss'
   const payload: Partial<JWTPayload> = {
-    iss: 'my-iss',
+    iss: myIss,
     secureData: 'encrypted data',
   }
 
@@ -115,7 +116,7 @@ Deno.test('Create JWT test case RS256', async () => {
 
   const verified = await verifyJWT(jwt, publicKey, {
     algorithm: 'RS256',
-    iss: 'my-iss',
+    iss: myIss,
   })
   assertEquals(verified.secureData, undefined)
 
@@ -125,6 +126,7 @@ Deno.test('Create JWT test case RS256', async () => {
   })
 
   const verifiedSecure = await verifyJWT(jwtSecure, publicKey, {
+    iss: myIss,
     algorithm: 'RS256',
   })
 
@@ -134,6 +136,7 @@ Deno.test('Create JWT test case RS256', async () => {
   const verifiedSecureDec = await verifyJWT(jwtSecure, publicKey, {
     algorithm: 'RS256',
     encryptionKey: 'my secret',
+    iss: myIss,
   })
   assertEquals(verifiedSecureDec.secureData, 'encrypted data')
 

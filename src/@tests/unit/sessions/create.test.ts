@@ -1,6 +1,8 @@
 // deno-lint-ignore-file no-explicit-any
-import { assert, assertEquals } from '@std/assert'
-import { createAccessToken } from 'utils/sessions/create.ts'
+import { assert, assertAlmostEquals, assertEquals } from '@std/assert'
+import { createAccessToken, generateSessionTokens } from 'utils/sessions/create.ts'
+import { decodeJWT } from 'utils/jwt/decode.ts'
+import { parseTTL } from '@zanix/helpers'
 
 Deno.test('Create access token with correct local session', async () => {
   const locals: any = {}
@@ -23,4 +25,13 @@ Deno.test('Create access token with correct local session', async () => {
   assertEquals(locals.session.subject, 'mock@example.com')
   assert(locals.session.payload.exp)
   assert(locals.session.payload.iss)
+})
+
+Deno.test('Create session token shoud return correct refresn and access', async () => {
+  const tokens = await generateSessionTokens({ locals: {} } as never, {} as never)
+
+  const refresh = decodeJWT(tokens.refreshToken)
+  assert(refresh.payload.exp)
+  assertEquals(31536000, parseTTL('1y'))
+  assertAlmostEquals(refresh.payload.exp, Math.floor(Date.now() / 1000) + parseTTL('1y'), 10)
 })

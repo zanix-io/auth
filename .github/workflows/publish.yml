@@ -3,6 +3,10 @@
 name: Publish
 
 on:
+  # Run on push or PRs to master
+  pull_request:
+    branches:
+      - master
   push:
     branches:
       - master
