@@ -49,4 +49,5 @@ export const DEFAULT_JWT_ISSUER = 'zanix-auth'
 export const CACHE_KEYS = {
   jwtBlockList: 'zanix:jwt-block-list',
   rateLimit: 'zanix:rate-limit',
+  otp: 'zanix:otp',
 }

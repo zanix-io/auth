@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.12] - 2025-12-17
+
+### Fixed
+
+- Clarified error messages related to session tokens.
+- Assigned a prefix to the KV key storage for OTPs.
+
 ## [0.3.11] - 2025-11-30
 
 ### Fixed

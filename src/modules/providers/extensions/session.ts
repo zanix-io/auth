@@ -1,7 +1,8 @@
 import type { AuthSessionOptions, SessionFlow } from 'typings/auth.ts'
 import type { ZanixAuthProvider } from '../auth.ts'
 
-import { generateSessionTokens, refreshSessionTokens } from 'utils/sessions/create.ts'
+import { generateSessionTokens } from 'utils/sessions/create.ts'
+import { refreshSessionTokens } from 'utils/sessions/refresh.ts'
 import { revokeSessionToken } from 'utils/sessions/revoke.ts'
 
 export function session(this: ZanixAuthProvider): SessionFlow {

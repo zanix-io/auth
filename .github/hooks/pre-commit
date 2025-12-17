@@ -3,7 +3,7 @@
 ######### LINT STAGED ############
 
 # Get the staged files that are added, copied, or modified (only specified extensions).
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+STAGED_FILES=$(git diff --staged --name-only --diff-filter=ACM)
 
 # Filter files for formatting and linting.
 STAGED_FMT_FILES=$(echo "$STAGED_FILES" | grep -E '\.(ts|tsx|js|jsx|md|json)$')

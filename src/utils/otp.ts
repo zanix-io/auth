@@ -1,5 +1,6 @@
 import type { ZanixCacheProvider } from '@zanix/server'
 import type { GenerateOTPOptions } from 'typings/auth.ts'
+import { CACHE_KEYS } from './constants.ts'
 
 /**
  * Generates a cryptographically secure numeric code of the given length.
@@ -42,10 +43,11 @@ export const generateOTP = async (
   const { target, exp = 300, length = 6 } = options
   const code = randomCode(length)
 
+  const key = `${CACHE_KEYS.otp}:${target}`
   if (Deno.env.has('REDIS_URI')) {
-    await cache.saveToCaches({ provider: 'redis', key: target, value: code, exp })
+    await cache.saveToCaches({ provider: 'redis', key, value: code, exp })
   } else {
-    cache.local.set(target, code, { exp })
+    cache.local.set(key, code, { exp })
   }
 
   return code
@@ -74,17 +76,20 @@ export const verifyOTP = async (
   if (!code) return false
 
   let isValid: boolean = false
+
+  const key = `${CACHE_KEYS.otp}:${target}`
+
   if (Deno.env.has('REDIS_URI')) {
-    const entry = await cache.getCachedOrFetch<string>('redis', target)
+    const entry = await cache.getCachedOrFetch<string>('redis', key)
     isValid = entry === code
     if (isValid) {
-      cache.local.delete(target)
-      await cache.redis.delete(target)
+      cache.local.delete(key)
+      await cache.redis.delete(key)
     }
   } else {
-    const entry = cache.local.get(target)
+    const entry = cache.local.get(key)
     isValid = entry === code
-    if (isValid) cache.local.delete(target)
+    if (isValid) cache.local.delete(key)
   }
 
   return isValid

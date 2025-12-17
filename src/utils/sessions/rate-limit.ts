@@ -69,7 +69,7 @@ export async function checkRateLimit(cache: ZanixCacheProvider, options: {
         return resolve({ count, createdAt, failedAttempts, canContinue: false })
       }
 
-      // Save failedAttempts
+      // Save failedAttempts to track consecutive failures and check against maxFailedAttempts.
       if (count === 1 && maxFaildedAttempts) {
         const failedAttempts = cache.local.get(failedAttemptsKey) || 0
         cache.local.set(
