@@ -4,10 +4,11 @@ import { jwtValidationGuard } from 'modules/middlewares/jwt-validation.guard.ts'
 import { createJWT } from 'utils/jwt/create.ts'
 import { contextMock } from '../../mocks.ts'
 import { addTokenToBlockList } from 'utils/sessions/block-list.ts'
-import { assert, assertEquals, assertFalse } from '@std/assert'
+import { assert, assertArrayIncludes, assertEquals, assertFalse } from '@std/assert'
 import { isUUID } from '@zanix/validator'
 import { generateRSAKeys } from '@zanix/helpers'
 import { sessionHeadersInterceptor } from 'modules/middlewares/headers.interceptor.ts'
+import { GENERAL_HEADERS, SESSION_HEADERS } from 'utils/constants.ts'
 
 console.warn = () => {}
 console.info = () => {}
@@ -82,8 +83,18 @@ Deno.test({
     const token = await createJWT({}, 'my-secret')
     context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 
+    context.cookies = {
+      [SESSION_HEADERS.user.token]: 'token',
+      [GENERAL_HEADERS.cookiesAcceptedHeader]: 'true',
+    }
     const { response } = await jwtValidationGuard()(context)
     assert(response)
+
+    assertArrayIncludes(response.headers.getSetCookie(), [
+      'X-Znx-User-Session-Status=failed; Max-Age=0; Path=/; HttpOnly; SameSite=Strict',
+      'X-Znx-Cookies-Accepted=true; Max-Age=0; Path=/; HttpOnly; SameSite=Strict',
+      'X-Znx-App-Token=undefined; Max-Age=0; Path=/; HttpOnly; SameSite=Strict',
+    ])
 
     const error = await response.json()
     assertEquals(error.cause.meta.reason, 'No session found with a valid rate limit configuration.')

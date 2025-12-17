@@ -158,3 +158,28 @@ export const checkAcceptedCookies = (
     ? false
     : cookies[cookiesAcceptedHeader] === 'true'
 }
+
+/**
+ * Add headers to response
+ * @param response
+ * @param headers
+ */
+export const addHeadersToResponse = (response: Response, headers: Headers) => {
+  const { 'Set-Cookie': cookies, ...baseHeaders } = headers
+
+  addCookiesToResponse(response, cookies)
+  for (const header of Object.entries(baseHeaders)) {
+    response.headers.append(...header)
+  }
+}
+
+/**
+ * Add cookies to response
+ * @param response
+ * @param cookies
+ */
+export const addCookiesToResponse = (response: Response, cookies: string[]) => {
+  for (const cookie of cookies) {
+    response.headers.append('Set-Cookie', cookie)
+  }
+}

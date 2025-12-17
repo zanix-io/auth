@@ -11,6 +11,8 @@ import { rateLimitGuard } from './rate-limit.guard.ts'
 import { getSecretByToken } from 'utils/jwt/secrets.ts'
 import { verifyJWT } from 'utils/jwt/verify.ts'
 import {
+  addCookiesToResponse,
+  addHeadersToResponse,
   checkAcceptedCookies,
   getClientSubject,
   getDefaultSessionHeaders,
@@ -141,7 +143,7 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
     const token = authHeader?.slice(7).trim()
     // deno-lint-ignore no-non-null-assertion
     if (!token || !authHeader!.startsWith('Bearer ')) {
-      const headers = await getDefaultSessionHeaders({
+      const { 'Set-Cookie': cookies, ...baseHeaders } = await getDefaultSessionHeaders({
         ...defaultSessionOpts,
         sessionStatus: 'failed',
       })
@@ -156,8 +158,9 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
             requestId: ctx.id,
           },
         }),
-        { headers, contextId: ctx.id },
+        { headers: baseHeaders, contextId: ctx.id },
       )
+      addCookiesToResponse(response, cookies)
 
       return { response }
     }
@@ -168,12 +171,16 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
       try {
         secret = getSecretByToken(token, type)
       } catch (e) {
-        const headers = await getDefaultSessionHeaders({
+        const { 'Set-Cookie': cookies, ...baseHeaders } = await getDefaultSessionHeaders({
           ...defaultSessionOpts,
           sessionStatus: 'failed',
         })
         if (e instanceof PermissionDenied) throw e
-        return { response: httpErrorResponse(e, { headers, contextId: ctx.id }) }
+
+        const response = httpErrorResponse(e, { headers: baseHeaders, contextId: ctx.id })
+        addCookiesToResponse(response, cookies)
+
+        return { response }
       }
 
       const isRSA = type === 'api'
@@ -206,17 +213,12 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
       const { response, headers } = rateLimit ? await rateLimitFn(ctx) : {}
 
       if (response) {
-        const { 'Set-Cookie': cookies, ...headers } = await getDefaultSessionHeaders({
+        const headers = await getDefaultSessionHeaders({
           ...defaultSessionOpts,
           sessionStatus: 'blocked',
         })
 
-        for (const cookie of cookies) {
-          response.headers.append('Set-Cookie', cookie)
-        }
-        for (const header of Object.entries(headers)) {
-          response.headers.append(...header)
-        }
+        addHeadersToResponse(response, headers)
 
         return { response }
       }
@@ -235,7 +237,7 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
 
       return { headers }
     } catch (e) {
-      const headers = await getDefaultSessionHeaders({
+      const { 'Set-Cookie': cookies, ...baseHeaders } = await getDefaultSessionHeaders({
         ...defaultSessionOpts,
         sessionStatus: 'failed',
       })
@@ -248,9 +250,10 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
             method: 'verifyJWT',
           },
         }),
-        { headers, contextId: ctx.id },
+        { headers: baseHeaders, contextId: ctx.id },
       )
 
+      addCookiesToResponse(response, cookies)
       return { response }
     }
   }
