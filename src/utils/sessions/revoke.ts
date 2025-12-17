@@ -5,7 +5,7 @@ import type { JWTPayload } from 'typings/jwt.ts'
 import { addTokenToBlockList } from 'utils/sessions/block-list.ts'
 import { defineLocalSession } from 'utils/sessions/context.ts'
 import { SESSION_HEADERS } from 'utils/constants.ts'
-import { HttpError } from '@zanix/errors'
+import { invalidRefreshTokenError } from './errors.ts'
 
 /**
  * Revokes one or multiple app token to the block list.
@@ -77,16 +77,8 @@ export const revokeSessionToken = async (
   const currentRefreshToken = token || ctx.cookies[tokenHeader]
 
   if (!currentRefreshToken) {
-    throw new HttpError('INTERNAL_SERVER_ERROR', {
-      code: 'INVALID_TOKEN',
-      cause: 'Refresh token is undefined and cannot be used to revoke the session.',
-      meta: {
-        source: 'zanix',
-        method: 'revokeSessionToken',
-        suggestion:
-          'Provide a valid token to this method or ensure that the required cookies are available.',
-      },
-    })
+    const { error } = invalidRefreshTokenError('revokeSessionToken')
+    throw error
   }
 
   const tokens = [currentRefreshToken]

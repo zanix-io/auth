@@ -7,6 +7,7 @@ import { SESSION_HEADERS } from 'utils/constants.ts'
 import { checkTokenBlockList } from './block-list.ts'
 import { getSecretByToken } from '../jwt/secrets.ts'
 import { generateSessionTokens } from './create.ts'
+import { invalidRefreshTokenError } from './errors.ts'
 import { verifyJWT } from '../jwt/verify.ts'
 
 /**
@@ -42,22 +43,9 @@ export const refreshSessionTokens = async (
   const currentRefreshToken = token || ctx.cookies[tokenHeader]
   const secret = getSecretByToken(currentRefreshToken)
 
-  const metaError = {
-    source: 'zanix',
-    method: 'refreshSessionTokens',
-    suggestion:
-      `Provide a valid refresh token in the request body ("token") or ensure that the authentication cookie '(${
-        SESSION_HEADERS['user'].token
-      })' is present.`,
-  }
+  const { metaError, error } = invalidRefreshTokenError('refreshSessionTokens')
 
-  if (!currentRefreshToken) {
-    throw new HttpError('UNAUTHORIZED', {
-      code: 'INVALID_TOKEN',
-      cause: 'Refresh token is undefined and cannot be used to refresh the session.',
-      meta: metaError,
-    })
-  }
+  if (!currentRefreshToken) throw error
 
   const payload = await verifyJWT(currentRefreshToken, secret)
 
