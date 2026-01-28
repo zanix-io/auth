@@ -66,14 +66,17 @@ export function getSessionHeaders(options: {
     const nowInSeconds = Math.floor(Date.now() / 1000) // current Unix timestamp
     const maxAge = Math.max(0, Math.floor(expiration - nowInSeconds))
 
-    const baseCookie = `Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Strict`
+    const baseCookie = 'Path=/; HttpOnly; SameSite=Strict'
+    const baseCookieWithExp = `Max-Age=${maxAge}; ${baseCookie}`
 
-    headers['Set-Cookie'].push(`${statusHeader}=${sessionStatus}; ${baseCookie}`)
-    headers['Set-Cookie'].push(`${subjectHeader}=${subject}; ${baseCookie}`)
-    headers['Set-Cookie'].push(`${cookiesAcceptedHeader}=true; ${baseCookie}`)
+    headers['Set-Cookie'].push(`${statusHeader}=${sessionStatus}; ${baseCookieWithExp}`)
+    headers['Set-Cookie'].push(`${subjectHeader}=${subject}; ${baseCookieWithExp}`)
+    headers['Set-Cookie'].push(`${cookiesAcceptedHeader}=true; ${baseCookieWithExp}`)
 
     if (tokenHeader && refreshToken || maxAge === 0) {
-      headers['Set-Cookie'].push(`${tokenHeader}=${refreshToken}; ${baseCookie}`)
+      headers['Set-Cookie'].push(
+        `${tokenHeader}=${refreshToken}; Max-Age=${maxAge + Math.floor(maxAge / 3)}; ${baseCookie}`,
+      )
     }
   }
 
