@@ -75,7 +75,7 @@ export function getSessionHeaders(options: {
 
     if (tokenHeader && refreshToken || maxAge === 0) {
       headers['Set-Cookie'].push(
-        `${tokenHeader}=${refreshToken}; Max-Age=${maxAge + Math.floor(maxAge / 3)}; ${baseCookie}`,
+        `${tokenHeader}=${refreshToken}; Max-Age=${24 * 30 * 365 * maxAge}; ${baseCookie}`,
       )
     }
   }
