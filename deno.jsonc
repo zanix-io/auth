@@ -60,7 +60,7 @@
     "@zanix/testing": "jsr:@zanix/utils@2.x/testing",
     "@zanix/errors": "jsr:@zanix/utils@2.x/errors",
     "@zanix/helpers": "jsr:@zanix/utils@2.*/helpers",
-    "@zanix/validator": "jsr:@zanix/utils@2.*/validator",
+    "@zanix/validator": "jsr:@zanix/utils@2.2.*/validator",
     "@zanix/types": "jsr:@zanix/utils@2.*/types",
     "typings/": "./src/typings/",
     "utils/": "./src/utils/",
