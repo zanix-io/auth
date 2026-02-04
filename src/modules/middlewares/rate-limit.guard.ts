@@ -66,6 +66,7 @@ export const rateLimitGuard = (
   options: RateLimitsOptions = {},
 ): MiddlewareGlobalGuard => {
   const {
+    app,
     windowSeconds = Number(Deno.env.get('RATE_LIMIT_WINDOW_SECONDS')) || 60,
     anonymousLimit = 100,
   } = options
@@ -97,7 +98,7 @@ export const rateLimitGuard = (
 
     const { id: sessionId, type: sessionType, rateLimit } = ctx.locals.session
 
-    const key = `${CACHE_KEYS.rateLimit}:${sessionId}`
+    const key = `${CACHE_KEYS.rateLimit}:${app ? `${app}-${sessionId}` : sessionId}`
 
     const { count, createdAt, canContinue, failedAttempts } = await checkRateLimit(
       ctx.providers.get('cache'),

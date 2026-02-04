@@ -33,6 +33,12 @@ export type JWTValidationOpts = {
   type?: SessionTypes
   /** Specify an algorithm only if it differs from the project standard. */
   algorithm?: JWTAlgorithm
+  /**
+   * App this validation applies to.
+   * - If undefined, the validation is considered global.
+   * - If defined, it only applies to the specified app.
+   */
+  app?: string
 } & Omit<JWTVerifyOptions, 'aud' | 'algorithm'>
 
 export type GenerateOTPOptions = {

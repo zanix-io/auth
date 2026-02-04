@@ -119,6 +119,7 @@ import {
  */
 export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareGlobalGuard => {
   const {
+    app,
     sub,
     permissions,
     type = 'user',
@@ -130,7 +131,7 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
 
   const authHeaderKey = AUTH_HEADERS[type]
 
-  const rateLimitFn = rateLimitGuard({ anonymousLimit: 0 }) // user must be authenticated
+  const rateLimitFn = rateLimitGuard({ anonymousLimit: 0, app }) // user must be authenticated
 
   return async (ctx) => {
     const { req: { headers: ctxHeaders }, cookies } = ctx
@@ -210,10 +211,11 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
       defineLocalSession(ctx, { type, payload: jwtPayload })
 
       // Rate limit validation
-      const { response, headers } = rateLimit ? await rateLimitFn(ctx) : {}
+      const { response, headers: rateLimitHeaders } = rateLimit ? await rateLimitFn(ctx) : {}
 
       if (response) {
         const headers = await getDefaultSessionHeaders({
+          ...rateLimitHeaders,
           ...defaultSessionOpts,
           sessionStatus: 'blocked',
         })
@@ -235,7 +237,7 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
 
       Object.freeze(ctx.locals.session)
 
-      return { headers }
+      return { headers: rateLimitHeaders }
     } catch (e) {
       const { 'Set-Cookie': cookies, ...baseHeaders } = await getDefaultSessionHeaders({
         ...defaultSessionOpts,
