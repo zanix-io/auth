@@ -18,7 +18,7 @@ import logger from '@zanix/logger'
  *
  * @example
  * ```ts
- * const isBlocklisted = await checkBlockList('token123');
+ * const isBlocklisted = await checkTokenBlockList('token-id', cache, kvDb);
  * if (isBlocklisted) {
  *   console.log('Token has been revoked.');
  * }
@@ -56,14 +56,14 @@ export async function checkTokenBlockList(
  *
  * @param {string} token - The JWT to blocklist.
  * @param {ZanixCacheProvider} cache - Cache provider.
- * @param {ZanixKVConnector} kvDb - Key-value store connector.
+ * @param {ZanixKVConnector} [kvDb] - Key-value store connector.
  *
- * @returns {Promise<string>} Token ID
+ * @returns {Promise<JWTPayload>} The blocklisted token's decoded payload.
  *
  * @example
  * ```ts
- * // Blocklist a token for 3600 seconds (1 hour)
- * addTokenToBlockList('token123', 3600);
+ * // Blocklist a token until its own expiration
+ * await addTokenToBlockList(token, cache, kvDb);
  * ```
  */
 export async function addTokenToBlockList(

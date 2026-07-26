@@ -8,14 +8,17 @@
 
 ## 🧭 Table of Contents
 
-- [🧩 Description](#🧩-description)
-- [⚙️ Features](#⚙️-features)
-- [📦 Installation](#📦-installation)
-- [🚀 Basic Usage](#🚀-basic-usage)
-- [🤝 Contributing](#🤝-contributing)
-- [🕒 Changelog](#🕒-changelog)
-- [⚖️ License](#⚖️-license)
-- [🔗 Resources](#🔗-resources)
+1. [Description](#-description)
+2. [Features](#-features)
+3. [Installation](#-installation)
+4. [Core Registration](#-core-registration)
+5. [Basic Usage](#-basic-usage)
+6. [Authentication Methods](#-authentication-methods)
+7. [Configuration](#-configuration)
+8. [Contributing](#-contributing)
+9. [Changelog](#-changelog)
+10. [License](#-license)
+11. [Resources](#-resources)
 
 ---
 
@@ -27,7 +30,8 @@ abuse protection via rate limiting.
 
 It provides a **unified and extensible system** for:
 
-- OAuth2 connectors (Google currently supported)
+- OAuth2 connectors (Google built in; extend `OAuth2Connector` for any other provider)
+- TOTP authenticator-app 2FA (Google Authenticator, Microsoft Authenticator, etc.)
 - JWT generation and verification (HMAC and RSA with key rotation)
 - Session management (create, revoke, generate session headers)
 - Permission and scope validation (JWT audience)
@@ -35,39 +39,77 @@ It provides a **unified and extensible system** for:
 - Ready-to-use middleware to protect routes and resources
 - Decorators and pipes for interactors and controllers
 
+> 💡 If you're building a full application (not just consuming auth in isolation), use
+> **[`@zanix/core`](https://jsr.io/@zanix/core)**'s `Zanix.start()`/`Zanix.startWorker()` as your
+> entrypoint — it wires `@zanix/auth` together with `@zanix/datamaster`, `@zanix/notifications`, and
+> `@zanix/asyncmq` for you.
+
 ---
 
-## ⚙️ Features
+## ✨ Features
 
 - **OAuth2 Connector**
-  - `GoogleOAuth2Connector`: authenticate users using Google OAuth2.
-  - Easy integration with `ZanixAuthProvider`.
+  - `GoogleOAuth2Connector`: `generateAuthUrl()`, `getUserInfo()`/`validateToken()`,
+    `revokeToken()`, and a combined `authenticate()` that also creates the local session.
+  - Also available bound to the default provider: `this.providers.get('auth').google`.
+  - `OAuth2Connector`: the abstract base class `GoogleOAuth2Connector` itself extends — use it to
+    add a custom OAuth2 provider (GitHub, Microsoft, …) without reimplementing the flow. See
+    [Adding a Custom OAuth2 Provider](./docs/authentication-methods.md#-adding-a-custom-oauth2-provider).
 
 - **Provider DSL**
-  - `createAuthProvider()`: generates a `ZanixAuthProvider` using the Zanix `@Provider` decorator.
-  - Supports lazy initialization and can be used in interactors (`@Interactor({ Provider })`).
+  - A default `ZanixAuthProvider` is registered automatically under the `'auth'` core-provider key —
+    `this.providers.get('auth')` works with zero setup, the same pattern `@zanix/asyncmq` uses for
+    its `'worker'` provider.
+  - This registration (along with the default session headers interceptor, and the Google connector
+    when `GOOGLE_OAUTH2_CLIENT_ID` is set) is wired by importing `jsr:@zanix/auth/core` once — see
+    [Core Registration](#-core-registration). If your app already bootstraps via `@zanix/core`'s
+    `Zanix.start()`, this is handled for you.
+  - The provider also exposes `.otp`, `.totp`, and `.session` (see below), bound to the current
+    request context — no need to thread `ctx`/cache/connectors through the lower-level functions
+    yourself.
 
 - **JWT Handling**
   - Exported types: `JWT`, `JWTHeader`, `JWTPayload`.
-  - `createJWT(data, opts)`: create JWT tokens.
-  - `verifyJWT(token, opts)`: verify JWT tokens.
+  - `createJWT(payload, secret, opts?)`: create JWT tokens.
+  - `verifyJWT(token, secret, opts?)`: verify JWT tokens.
+  - `decodeJWT(token)`: decode a JWT's header/payload without verifying its signature.
+  - `getSecretByToken(token, type?)`: resolve the signing/verification secret for a given token.
   - Supports both HMAC and RSA keys.
   - JWK key rotation with versioned keys (`_V1`, `_V2`, …), controlled by `JWK_ROTATION_CYCLE`.
 
 - **Session Management**
-  - `createSessionToken()`, `createAccessToken()`, `createRefreshToken()`: generate different
+  - `generateSessionTokens()`, `createAccessToken()`, `createRefreshToken()`: generate different
     session token types.
-  - `revokeSessionAndToken()`, `revokeSessionTokens()`: revoke sessions and tokens.
+  - `revokeAppTokens()`, `revokeSessionToken()`: revoke tokens or a full session.
   - `getSessionHeaders()`, `getDefaultSessionHeaders()`: add standardized session headers to
-    responses.
+    responses (see [Session Response Headers](./docs/configuration.md#-session-response-headers)).
+  - `userSessionHeaders`, `apiSessionHeaders`: the `user`/`api` header and cookie names used above
+    (`sub`, `session`, `token`), for consumers that need to reference them directly.
+  - Also available bound to the default provider: `this.providers.get('auth').session` —
+    `.generateTokens()`, `.refreshTokens()`, `.revokeToken()`.
 
 - **Block List**
-  - `addTokenToBlockList(jti)`: add a JWT (by its `jti`) to the blocklist.
-  - `checkTokenBlockList(jti)`: verify whether a token is blocked.
+  - `addTokenToBlockList(token, cache, kvDb?)`: add a JWT to the blocklist (by its `jti`, extracted
+    internally).
+  - `checkTokenBlockList(jti, cache, kvDb)`: verify whether a token ID is blocked.
 
 - **OTP (One-Time Password)**
   - `generateOTP()`: generate OTP codes for additional authentication steps.
   - `verifyOTP()`: verify OTP validity.
+  - Also available bound to the default provider: `this.providers.get('auth').otp` — `.generate()`,
+    `.verify()`, and a combined `.authenticate()` that also creates the local session (mirrors
+    `.google.authenticate()`).
+
+- **TOTP (Authenticator App 2FA)**
+  - `generateTOTPSecret()`, `getTOTPProvisioningUri()`: enroll a user with an authenticator app
+    (Google Authenticator, Microsoft Authenticator, etc.) — generate a secret and a QR-code URI.
+    `issuer` defaults to `'zanix-auth'` when omitted.
+  - `generateTOTP()`, `verifyTOTP()`: compute/verify a time-based code, tolerating clock drift.
+  - Always HMAC-SHA1, 6 digits, 30s steps — the defaults every authenticator app expects.
+  - Also available bound to the default provider: `this.providers.get('auth').totp` —
+    `.generateSecret()`, `.getProvisioningUri()`, `.verify()`, and a combined `.authenticate()` that
+    also creates the local session. See
+    [Two-Factor Authentication (TOTP)](./docs/authentication-methods.md#-two-factor-authentication-totp).
 
 - **Scope / Permission Validation**
   - `scopeValidation()`: validate that JWTs include the required permissions or scopes.
@@ -99,8 +141,25 @@ import * as auth from 'jsr:@zanix/auth@[version]'
 Import specific modules:
 
 ```ts
-import { createAuthProvider, GoogleOAuth2Connector } from 'jsr:@zanix/auth@[version]'
+import { GoogleOAuth2Connector } from 'jsr:@zanix/auth@[version]'
 ```
+
+---
+
+## 🧷 Core Registration
+
+Importing `jsr:@zanix/auth` (the default entrypoint) only exposes its exported classes, functions,
+and types — it does **not** register anything with the Zanix framework by itself. To get the
+zero-config behavior described under [Provider DSL](#-features) (the default `ZanixAuthProvider`
+under `'auth'`, the session headers interceptor, and — when `GOOGLE_OAUTH2_CLIENT_ID` is set — a
+default `GoogleOAuth2Connector`), import the `./core` subpath once, anywhere it will run at startup:
+
+```ts
+import 'jsr:@zanix/auth/core'
+```
+
+> If your app bootstraps via **[`@zanix/core`](https://jsr.io/@zanix/core)**'s `Zanix.start()`/
+> `Zanix.startWorker()`, this import already happens for you — no extra setup needed.
 
 ---
 
@@ -113,18 +172,18 @@ Example showing how to:
 3. Generate and verify session tokens
 
 ```ts
-import { createAuthProvider, RequirePermissions } from 'jsr:@zanix/auth@latest'
+import { AuthTokenValidation } from 'jsr:@zanix/auth@latest'
 import { Interactor, ZanixInteractor } from '@zanix/server'
 
-const AuthProvider = createAuthProvider()
-
-@Interactor({ Provider: AuthProvider })
+@Interactor()
 class LoginInteractor extends ZanixInteractor {
   public async auth() {
-    const connector = this.provider.google
+    const connector = this.providers.get('auth').google
 
     const { code } = /* … obtain OAuth2 auth code … */
-    const { tokens, session } = await connector.authenticate(code, this.context)
+    // `permissions` here becomes the session token's `aud` claim — see Permissions & Scopes
+    // in the Authentication Methods guide (docs/authentication-methods.md).
+    const { user, session } = await connector.authenticate(code, { permissions: ['admin'] })
 
     // For security reasons, never expose Google OAuth tokens or refresh tokens to the frontend.
     // These tokens must always remain server-side.
@@ -132,8 +191,8 @@ class LoginInteractor extends ZanixInteractor {
   }
 }
 
-@RequirePermissions(['admin'])
 class SecureInteractor extends ZanixInteractor {
+  @AuthTokenValidation({ permissions: ['admin', 'write:user'] }) // any ONE of these is enough
   async handle() {
     /** your code */
   }
@@ -142,74 +201,23 @@ class SecureInteractor extends ZanixInteractor {
 
 ---
 
-### 🌐 Environment Variables
+## 🔐 Authentication Methods
 
-| Variable                      | Description                                                              | Example                                    |
-| ----------------------------- | ------------------------------------------------------------------------ | ------------------------------------------ |
-| `GOOGLE_OAUTH2_CLIENT_ID`     | Google OAuth2 client ID                                                  | `your-google-client-id`                    |
-| `GOOGLE_OAUTH2_CLIENT_SECRET` | Google OAuth2 client secret                                              | `your-google-client-secret`                |
-| `GOOGLE_OAUTH2_REDIRECT_URI`  | OAuth2 redirect URI                                                      | `https://yourapp.com/auth/google/callback` |
-| `JWK_ROTATION_CYCLE`          | Rotation cycle for JWK keys. Used only when multiple JWK versions exist. | `"30m"`                                    |
-| `JWT_KEY`                     | Base key for HMAC JWTs (`user` tokens)                                   | `my-secret-key`                            |
-| `JWT_KEY_V1`                  | Versioned HMAC key                                                       | `another-key`                              |
-| `JWK_PRI`                     | RSA private key for `api` tokens                                         | `base64`                                   |
-| `JWK_PUB`                     | RSA public key for `api` tokens                                          | `base64`                                   |
-| `JWK_PRI_V1`                  | Versioned RSA private key                                                | `…`                                        |
-| `JWK_PUB_V1`                  | Versioned RSA public key                                                 | `…`                                        |
-| `RATE_LIMIT_WINDOW_SECONDS`   | Rate limit window duration (seconds)                                     | `60`                                       |
-| `RATE_LIMIT_PLANS`            | Rate limit plans.                                                        | `0:100;1:1000;2:3000`                      |
+Beyond the Google OAuth2 flow shown above, `@zanix/auth` also supports adding custom OAuth2
+providers (GitHub, Microsoft, …), OTP (one-time password) delivery over email/SMS, and TOTP
+authenticator-app 2FA — plus how `permissions`/scopes are checked across all of them. Use these when
+Google isn't your only identity provider, or when you need a second authentication factor.
 
----
-### 🔐 Session & Security
-
-#### ⏱️ Rate Limiting
-
-When using `rateLimitGuard`:
-
-- `RATE_LIMIT_WINDOW_SECONDS` defines the time window for rate limiting.
-- `RATE_LIMIT_PLANS` maps plan indices to allowed requests per window.
-
-The `session.rateLimit` determines which plan applies (e.g., `0` → 100 requests, `1` → 1000).
-If no plan matches, the value directly sets the allowed number of requests per window.
-
-Response headers may include:
-
-- `X-Znx-RateLimit-Limit` – maximum requests allowed in the current window
-- `X-Znx-RateLimit-Remaining` – remaining requests in the current window
-- `X-Znx-RateLimit-Reset` – seconds until the window resets
-- `Retry-After` – seconds to wait before retrying when the limit is exceeded
----
-
-#### 🔄 Key Rotation
-
-`JWK_ROTATION_CYCLE` defines the rotation interval for JWT/JWK signing keys. You can provide a
-human-readable duration (e.g., `"1h"`, `"30m"`, `"7d"`) or a numeric value in seconds.
-
-Rotation only occurs if multiple versioned keys are available (e.g., `JWK_PRI_V1`, `JWK_PRI_V2`,
-…).\
-The system cycles through the available keys at each rotation interval. If only one key exists,
-rotation is disabled.
+See the [Authentication Methods Guide](./docs/authentication-methods.md) for flows, examples, and
+security considerations for each.
 
 ---
 
-#### 📨 Session Response Headers
+## 🔧 Configuration
 
-When a valid session is present, the following headers may be added to the response:
-
-- `x-znx-<type>-session-status:<SessionStatus>` – indicates the current session status.
-- `x-znx-<type>-id` – subject ID, included when a user token contains a `sub` claim.
-- If `X-Znx-Cookies-Accepted: true` is present (in headers or cookies), session cookies are sent via
-  `Set-Cookie`:
-
-  ```text
-  X-Znx-App-Token=<sessionToken>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
-
-  X-Znx-<type>-Session-Status=<SessionStatus>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
-
-  X-Znx-<type>-Id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
-
-  X-Znx-Cookies-Accepted=true; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
-  ```
+Environment variables (Google OAuth2, JWT/JWK keys, rate-limit plans), rate limiting behavior, JWK
+key rotation, and the session response headers/cookies added to responses are all documented in the
+[Configuration Guide](./docs/configuration.md).
 
 ---
 
@@ -225,18 +233,22 @@ When a valid session is present, the following headers may be added to the respo
 
 ## 🕒 Changelog
 
-See [`CHANGELOG`](./CHANGELOG.md) for the version history.
+See [`CHANGELOG`](./docs/CHANGELOG.md) for the version history.
 
 ---
 
-## ⚖️ License
+## 📜 License
 
-Licensed under the **MIT License**. See the [`LICENSE`](./LICENSE) file for details.
+Licensed under the **MIT License**. See the [`LICENSE`](./docs/LICENSE) file for details.
 
 ---
 
 ## 🔗 Resources
 
+- [Authentication Methods Guide](./docs/authentication-methods.md) — custom OAuth2 providers, OTP,
+  TOTP 2FA, and permissions/scopes.
+- [Configuration Guide](./docs/configuration.md) — environment variables, rate limiting, key
+  rotation, session response headers.
 - [Zanix Framework](https://github.com/zanix-io)
 - [Deno Documentation](https://deno.com)
 - Repository: [https://github.com/zanix-io/auth](https://github.com/zanix-io/auth)

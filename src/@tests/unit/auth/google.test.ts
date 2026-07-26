@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import { assert, assertEquals, assertMatch } from '@std/assert'
+import { assert, assertEquals, assertMatch, assertThrows } from '@std/assert'
 import { GoogleOAuth2Connector } from 'modules/connectors/google/mod.ts'
 
 // ------------------------------
@@ -92,4 +92,42 @@ Deno.test('authenticate() should return tokens and user info', async () => {
   assertEquals(result.user.email, 'mock@example.com')
 
   assertEquals(mock.calls.length, 1) // userInfo
+})
+
+Deno.test('revokeToken() POSTs to the Google revoke endpoint and resolves true', async () => {
+  const calls: any[] = []
+  class RevokeMockRestClient {
+    public http = {
+      post: <T>(url: string, options: unknown): T => {
+        calls.push({ url, options })
+        return true as T
+      },
+    }
+  }
+  const connector = new TestGoogleConnector(new RevokeMockRestClient())
+
+  const result = await connector.revokeToken('some-token')
+
+  assert(result)
+  assertEquals(calls.length, 1)
+  assertMatch(calls[0].url, /revoke/)
+})
+
+Deno.test('constructor throws when required OAuth2 properties are missing', () => {
+  Deno.env.delete('GOOGLE_OAUTH2_CLIENT_ID')
+  Deno.env.delete('GOOGLE_OAUTH2_CLIENT_SECRET')
+  Deno.env.delete('GOOGLE_OAUTH2_REDIRECT_URI')
+
+  assertThrows(() => new GoogleOAuth2Connector({}))
+})
+
+Deno.test('generateAuthUrl() honors a GOOGLE_OAUTH2_AUTH_URL env var override', () => {
+  Deno.env.set('GOOGLE_OAUTH2_AUTH_URL', 'https://proxy.example.com/authorize')
+
+  const connector = new TestGoogleConnector(new MockRestClient())
+  const { url } = connector.generateAuthUrl()
+
+  assertMatch(url, /^https:\/\/proxy\.example\.com\/authorize\?/)
+
+  Deno.env.delete('GOOGLE_OAUTH2_AUTH_URL')
 })

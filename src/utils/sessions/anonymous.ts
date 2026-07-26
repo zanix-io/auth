@@ -38,17 +38,17 @@ export const getAnonymousSessionId = async (
  * Generates a session object for an anonymous user.
  *
  * @param rateLimit - The maximum number of allowed requests for this session.
- * @param req - The request object containing headers, typically from the handler context.
+ * @param headers - The request headers, typically from the handler context.
  *              Used to extract the client's IP and User-Agent.
  * @returns {Promise<Session>} - A Promise that resolves a `Session` object representing
  *            an anonymous user session with:
- *          - `id`: a unique identifier based on IP and User-Agent
+ *          - `id`: a hashed identifier derived from IP and User-Agent, prefixed with `anonymous-`
  *          - `rateLimit`: the provided request limit
  *          - `type`: always `'anonymous'`
  *
  * @example
- * const session = generateAnonymousSession(100, req);
- * console.log(session.id); // "123.45.67.89-Mozilla/5.0 ..."
+ * const session = await generateAnonymousSession(100, req.headers);
+ * console.log(session.id); // "anonymous-3f9a1b..."
  */
 export async function generateAnonymousSession(
   rateLimit: number,

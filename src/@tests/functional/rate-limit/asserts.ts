@@ -8,9 +8,9 @@ import { ProgramModule } from '@zanix/server'
 import { stub } from '@std/testing/mock'
 
 export const addValidHeaders = async (cache: 'cache:local' | 'cache:redis') => {
-  await import('@zanix/datamaster') // load cache core
+  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
   // deno-lint-ignore no-explicit-any
-  await ProgramModule.getConnectors().get<any>(cache).clear() // reset data
+  await ProgramModule.connectors.get<any>(cache).clear() // reset data
   const context = contextMock()
 
   const guard = rateLimitGuard({ app: 'test' })
@@ -22,7 +22,7 @@ export const addValidHeaders = async (cache: 'cache:local' | 'cache:redis') => {
 }
 
 export const addValidSessionHeaders = async () => {
-  await import('@zanix/datamaster') // load cache core
+  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
   const context = contextMock()
 
   const guard = rateLimitGuard({ app: 'test' })
@@ -36,7 +36,7 @@ export const addValidSessionHeaders = async () => {
 }
 
 export const shouldNotAddSessionHeaders = async () => {
-  await import('@zanix/datamaster') // load cache core
+  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
   const context = contextMock()
 
   const guard = rateLimitGuard({ app: 'test' })
@@ -50,13 +50,14 @@ export const shouldNotAddSessionHeaders = async () => {
 }
 
 export const shouldSupportConcurrency = async (cache: 'cache:local' | 'cache:redis') => {
-  await import('@zanix/datamaster') // load cache core
+  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
   // deno-lint-ignore no-explicit-any
-  await ProgramModule.getConnectors().get<any>(cache).clear() // reset data
+  await ProgramModule.connectors.get<any>(cache).clear() // reset data
   const context = contextMock()
 
   const guard = rateLimitGuard({ app: 'test' })
 
+  const windowStart = Date.now()
   await guard(context)
   await Promise.all([
     guard(context),
@@ -70,14 +71,20 @@ export const shouldSupportConcurrency = async (cache: 'cache:local' | 'cache:red
   assertFalse(response)
 
   assertEquals(headers[RATE_LIMIT_HEADERS.remainingHeader], '93')
+
+  // `resetHeader` is `windowSeconds - (elapsedSeconds % windowSeconds)`, computed against real
+  // wall-clock time (real Redis round-trips add unpredictable latency), so assert it's close to
+  // the value derived from what actually elapsed here rather than a hardcoded pair of seconds.
+  const elapsedSeconds = Math.floor((Date.now() - windowStart) / 1000)
+  const expectedReset = 60 - (elapsedSeconds % 60)
   const reset = Number(headers[RATE_LIMIT_HEADERS.resetHeader])
-  assert(reset === 58 || reset === 59)
+  assertAlmostEquals(reset, expectedReset, 2)
 }
 
 export const shouldFailDueLimitAnonymous = async (cache: 'cache:local' | 'cache:redis') => {
-  await import('@zanix/datamaster') // load cache core
+  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
   // deno-lint-ignore no-explicit-any
-  await ProgramModule.getConnectors().get<any>(cache).clear() // reset data
+  await ProgramModule.connectors.get<any>(cache).clear() // reset data
   const context = contextMock()
 
   const guard = rateLimitGuard({ anonymousLimit: 2, app: 'test' })
@@ -101,9 +108,9 @@ export const shouldFailDueLimitAnonymous = async (cache: 'cache:local' | 'cache:
 }
 
 export const shouldFailDueLimit = async (cache: 'cache:local' | 'cache:redis') => {
-  await import('@zanix/datamaster') // load cache core
+  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
   // deno-lint-ignore no-explicit-any
-  await ProgramModule.getConnectors().get<any>(cache).clear() // reset data
+  await ProgramModule.connectors.get<any>(cache).clear() // reset data
   const context = contextMock()
 
   context.locals.session = { id: 'my-id', type: 'user', rateLimit: 3 }
@@ -125,9 +132,9 @@ export const shouldFailDueLimit = async (cache: 'cache:local' | 'cache:redis') =
 }
 
 export const shouldLogError = async (cache: 'cache:local' | 'cache:redis') => {
-  await import('@zanix/datamaster') // load cache core
+  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
   // deno-lint-ignore no-explicit-any
-  await ProgramModule.getConnectors().get<any>(cache).clear() // reset data
+  await ProgramModule.connectors.get<any>(cache).clear() // reset data
   const context = contextMock()
 
   context.locals.session = { id: 'my-id', type: 'user', rateLimit: 2 }
@@ -162,9 +169,9 @@ export const shouldLogError = async (cache: 'cache:local' | 'cache:redis') => {
 }
 
 export const shouldResetLimit = async (cache: 'cache:local' | 'cache:redis') => {
-  await import('@zanix/datamaster') // load cache core
+  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
   // deno-lint-ignore no-explicit-any
-  await ProgramModule.getConnectors().get<any>(cache).clear() // reset data
+  await ProgramModule.connectors.get<any>(cache).clear() // reset data
   const context = contextMock()
 
   context.locals.session = { id: 'my-id', type: 'user', rateLimit: 3 }

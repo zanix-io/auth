@@ -20,8 +20,8 @@ const registerConnector = () => {
 /**
  * Core Google Oauth2 connector loader for Zanix.
  *
- * This module automatically registers the default Google Oauth2 connector
- * (`_ZanixGOAuthCoreConnector`) if the environment variable `GOOGLE_OAUTH2_CLIENT_ID` is set.
+ * This module automatically registers the default `GoogleOAuth2Connector`
+ * if the environment variable `GOOGLE_OAUTH2_CLIENT_ID` is set.
  * It uses the `@Connector()` decorator to register the connector with the Zanix framework.
  *
  * This behavior ensures that, when a Google OAuth configuration is provided,

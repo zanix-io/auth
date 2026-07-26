@@ -1,6 +1,6 @@
 import type { JWTHeader, JWTOptions, JWTPayload } from 'typings/jwt.ts'
 
-import { DEFAULT_JWT_ISSUER, JWT_ALGTHM } from 'utils/constants.ts'
+import { DEFAULT_AUTH_ISSUER, JWT_ALGTHM } from 'utils/constants.ts'
 import {
   base64UrlEncode,
   encryptAES,
@@ -20,10 +20,12 @@ import logger from '@zanix/logger'
  * @param options - The JWT configuration options.
  * @param {string} [options.jwtID] -Optional JWT unique identifier (jti). If not provided, the system will automatically generate one.
  * @param {string} [options.keyID] - Optional key ID or Version (if using multiple keys).
- * @param {number | Date} [options.expiration] - The expiration time in seconds (from now), or a `Date` object.
+ * @param {number | string} [options.expiration] - The expiration, either as a human-readable
+ *   string (e.g., `"1h"`, `"15m"`, `"7d"`) or a numeric value in seconds.
  * @param {JWTOptions['algorithm']} [options.algorithm] - The expected signing algorithm of the token (e.g., 'RS256', 'HS256', 'HS384'). Defaults to `HS256`
  * @param {JWTOptions['encryptionKey']} [options.encryptionKey] - The key used to encrypt or protect the payload's sensitive data. Required on RSA.
  * @returns The generated JWT string.
+ * @throws {Error} If `options.expiration` resolves to a duration of 0 seconds or less.
  *
  * @example
  * ```ts
@@ -73,7 +75,7 @@ export const createJWT = async (
   }
 
   payload.jti = jwtID || generateUUID()
-  payload.iss = payload.iss || DEFAULT_JWT_ISSUER
+  payload.iss = payload.iss || DEFAULT_AUTH_ISSUER
 
   const { hash, algthm } = JWT_ALGTHM[algorithm]
   const isRSA = algthm === 'RSA'

@@ -1,8 +1,8 @@
 /**
  * Validates whether a given set of roles or scopes is authorized based on a base set.
  *
- * This function checks if all the scopes in the `toValidate` set are included
- * within the `base` set. It can be used to enforce role-based or permission-based access control.
+ * This function checks if at least one scope in `userScopes` is included
+ * within `baseScopes`. It can be used to enforce role-based or permission-based access control.
  *
  * @function scopeValidation
  * @param {Set<string>} baseScopes - The base set of allowed roles or scopes (the reference for validation).

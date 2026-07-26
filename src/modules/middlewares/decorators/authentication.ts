@@ -26,7 +26,7 @@ import { jwtValidationGuard } from '../jwt-validation.guard.ts'
  *                  - `permissions`: An array of required permissions for access.
  *                  - `iss`: The expected issuer of the token.
  *                  - `type`: The authorization header type, either `"user"` or `"api"`.
- *                  - `rateLimitOptions`: Configuration for rate limiting, defined in `RateLimitsOptions`.
+ *                  - `rateLimit`: Whether to validate the session's rate limit. Defaults to `true`.
  *
  * @returns A method decorator (`ZanixGenericDecorator`) that applies the JWT validation logic
  *          and rate limiting to the decorated method.

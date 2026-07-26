@@ -11,12 +11,11 @@ import { HttpError } from '@zanix/errors'
  * It then retrieves the secret from the environment variables.
  *
  * @param {string} token - The JWT token to decode and extract the `kid` from.
- * @param {SessionTypes} type - The type of session, typically 'user' or another value,
- *                               which influences the key name.
- * @returns {string | undefined} - The secret key for the session type, or `undefined`
- *                                  if the key is not found in the environment.
+ * @param {SessionTypes} [type] - The type of session, typically 'user' or another value,
+ *                               which influences the key name. Defaults to `'user'`.
+ * @returns {string} The secret key resolved for the session type.
  *
- * @throws {Error} - If the `token` cannot be decoded or the `kid` is invalid.
+ * @throws {HttpError} If the resolved environment variable for the key is missing.
  */
 export const getSecretByToken = (token: string, type: SessionTypes = 'user'): string => {
   const { header: { kid } } = decodeJWT(token)

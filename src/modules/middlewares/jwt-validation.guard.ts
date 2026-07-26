@@ -1,7 +1,7 @@
 import type { JWTValidationOpts } from 'typings/auth.ts'
 import type { SessionStatus } from 'typings/sessions.ts'
 
-import { AUTH_HEADERS, DEFAULT_JWT_ISSUER } from 'utils/constants.ts'
+import { AUTH_HEADERS, DEFAULT_AUTH_ISSUER } from 'utils/constants.ts'
 import { httpErrorResponse, type MiddlewareGlobalGuard } from '@zanix/server'
 import { checkTokenBlockList } from 'utils/sessions/block-list.ts'
 import { defineLocalSession } from 'utils/sessions/context.ts'
@@ -47,20 +47,17 @@ import {
  * The `kid` (Key ID) header, if present in the JWT, determines the suffix `_<kid>`.
  *
  * ## Session Response Headers
- * When the token is successfully validated:
+ * When validation **fails** (missing/invalid token, blocklisted token, or rate-limited),
+ * this guard builds a failure response via `getDefaultSessionHeaders`, which includes:
  *
- * - `x-znx-<type>-session-status:<SessionStatus}>` is added to indicate the session status.
- * - `x-znx-<type>-id` Subject Id header is added when a user token identifier (`sub`) is included.
- * - Rate-limit headers are added when the {@link rateLimitGuard} is executed.
- * - If `X-Znx-Cookies-Accepted: true` is present (in headers or cookies), session cookies are sent via
- *   `Set-Cookie`:
+ * - `x-znx-<type>-session-status:<SessionStatus}>` to indicate the session status.
+ * - `x-znx-<type>-id` Subject Id header, when a client subject can be resolved.
+ * - If `X-Znx-Cookies-Accepted: true` is present (in headers or cookies), the same
+ *   session status/subject/cookie-consent cookies are sent via `Set-Cookie`.
  *
- *           - X-Znx-App-Token=<sessionToken>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
- *           - X-Znx-<type>-Session-Status=<SessionStatus>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
- *           - X-Znx-<type>-Id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
- *           - X-Znx-Cookies-Accepted=true; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
- *
- * - `Max-Age` is calculated from the session expiration timestamp minus the current Unix time.
+ * When validation **succeeds**, this guard only assigns `ctx.locals.session` — the
+ * corresponding response headers/cookies are added afterwards by
+ * {@link sessionHeadersInterceptor}, not by this guard.
  *
  * ## Permissions / Audience Validation
  * If the `permissions` option is supplied, it is matched against the `aud` claim
@@ -93,7 +90,8 @@ import {
  *        Required only when using type `api` (RSA algorithm) + payload's secure data.
  *
  * @param {string} [options.iss]
- *        Expected issuer (`iss`) claim. If provided, the guard enforces an exact match.
+ *        Expected issuer (`iss`) claim. The guard always enforces an exact match,
+ *        defaulting to `DEFAULT_AUTH_ISSUER` (`'zanix-auth'`) when omitted.
  *
  * @param {string} [options.sub]
  *        Expected subject (`sub`) claim. Optional.
@@ -123,7 +121,7 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
     sub,
     permissions,
     type = 'user',
-    iss = DEFAULT_JWT_ISSUER,
+    iss = DEFAULT_AUTH_ISSUER,
     encryptionKey,
     algorithm,
     rateLimit = true,
@@ -228,11 +226,14 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
       const status: SessionStatus = 'active'
 
       // This value is processed in headers interceptor, to add valid session headers.
+      // `token` is intentionally NOT included here: it holds the access token from this
+      // request's Authorization header, not the refresh token issued at login. Forwarding
+      // it would make sessionHeadersInterceptor overwrite the refresh-token cookie with
+      // the access token on every authenticated request.
       ctx.locals.session = {
         // deno-lint-ignore no-non-null-assertion
         ...ctx.locals.session!,
         status,
-        token,
       }
 
       Object.freeze(ctx.locals.session)

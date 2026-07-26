@@ -54,6 +54,7 @@ export type SessionStatus = 'active' | 'failed' | 'unconfirmed' | 'blocked' | 'r
  */
 export type SessionTypes = 'user' | 'api'
 
+/** Common access-control fields shared by session/app token creation options. */
 export type AppTokenBaseAccess = {
   /** Permissions required to access the protected resource.
    * Can be roles, scopes, permissions, or audience claims.
@@ -87,8 +88,8 @@ export type AppTokenOptions<T extends SessionTypes> = {
   /** User or API Id. */
   subject: string
   /**
-   * The expiration type, either as a human-readable
-   * string (e.g., `"1h"`, `"15m"`, `"7d"`) or a numeric value in seconds.The expiration time in seconds (from now), or a `Date` object.
+   * The expiration, either as a human-readable
+   * string (e.g., `"1h"`, `"15m"`, `"7d"`) or a numeric value in seconds.
    */
   expiration?: number | string
   /**

@@ -56,7 +56,7 @@ import { HttpError } from '@zanix/errors'
  * @param options - The rate limit configuration options.
  * @param options.windowSeconds -  Optional duration of the time window (in seconds) over which requests are counted.
  *                                 Defaults to `60` seconds. You can also override it using the `RATE_LIMIT_WINDOW_SECONDS` environment variable.
- * @param option.anonymousLimit - Maximum number of requests allowed for anonymous users within the time window.
+ * @param options.anonymousLimit - Maximum number of requests allowed for anonymous users within the time window.
  *                           Defaults to `100`.
  *                           Set to `0` or `false` to disable access for anonymous users.
  * @function rateLimitGuard
@@ -83,9 +83,9 @@ export const rateLimitGuard = (
           source: 'zanix',
           method: 'rateLimitGuard',
           requestId: ctx.id,
-          reason: !sessionRateLimit
-            ? 'No session found with a valid rate limit configuration.'
-            : 'Anonymous users are not permitted',
+          reason: !session
+            ? 'Anonymous users are not permitted'
+            : 'No session found with a valid rate limit configuration.',
         },
       })
     }

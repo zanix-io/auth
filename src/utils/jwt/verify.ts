@@ -3,7 +3,7 @@ import type { JWTPayload, JWTVerifyOptions } from 'typings/jwt.ts'
 import { base64UrlDecode, decryptAES, generateHash, verifyHMAC, verifyRSA } from '@zanix/helpers'
 import { PermissionDenied } from '@zanix/errors'
 import { scopeValidation } from 'utils/scope.ts'
-import { DEFAULT_JWT_ISSUER, JWT_ALGTHM } from 'utils/constants.ts'
+import { DEFAULT_AUTH_ISSUER, JWT_ALGTHM } from 'utils/constants.ts'
 import logger from '@zanix/logger'
 
 /**
@@ -13,6 +13,7 @@ import logger from '@zanix/logger'
  * @param secret - The secret key used to verify the JWT.
  * @param options - Optional verification options (e.g., `iss`, `aud`, `algotithm`).
  * @param {string} [options.iss] - The expected token issuer. If provided, it validates that the iss claim matches this value; otherwise, it uses the system's default issuer.
+ * @param {string} [options.sub] - The expected subject of the token. If provided, it validates that the `sub` claim in the token matches this value.
  * @param {string} [options.aud] - The expected audience of the token. If provided, it will validate that the `aud` claim in the token matches this value.
  * @param {JWTOptions['algorithm']} [options.algorithm] - The expected signing algorithm of the token (e.g., 'RS256', 'HS256', 'HS384'). Defaults to `HS256`
  * @param {JWTOptions['encryptionKey']} [options.encryptionKey] - The key used to encrypt or protect the payload's sensitive data. Required on RSA.
@@ -35,7 +36,7 @@ export const verifyJWT = async (
   secret: string,
   options: JWTVerifyOptions = {},
 ): Promise<JWTPayload> => {
-  const { algorithm = 'HS256', iss = DEFAULT_JWT_ISSUER, aud, sub, encryptionKey } = options
+  const { algorithm = 'HS256', iss = DEFAULT_AUTH_ISSUER, aud, sub, encryptionKey } = options
   const [encodedHeader, encodedPayload, encodedSignature] = token.split('.')
 
   // Recreate the data part (header + payload) to check against the signature

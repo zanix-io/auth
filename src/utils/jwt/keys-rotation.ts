@@ -38,8 +38,7 @@ function getVersionedKeys(
 /**
  * Reads the rotation cycle duration from `JWK_ROTATION_CYCLE`.
  * The value is a TTL string such as "30d", "12h" or `0` to disable.
- * A missing value disables rotation.
- * Defaults to `30d`
+ * A missing value defaults to `30d`; only an explicit `0` disables rotation.
  *
  * @returns {number} The cycle length in seconds. Returns 0 if rotation is disabled.
  */
@@ -79,7 +78,7 @@ function getActiveVersionIndex(cycleSeconds: number, total: number): number {
  * the rotation adapts accordingly and cycles through the available keys.
  *
  * @param {'JWT_KEY' | 'JWK_PRI'} prefix - Environment variable prefix to resolve.
- * @returns {string | undefined} The selected key.
+ * @returns {{ value?: string; version?: \`V${number}\` }} The selected key value and, when versioned, its version.
  */
 export function getRotatingKey(
   prefix: 'JWT_KEY' | 'JWK_PRI',

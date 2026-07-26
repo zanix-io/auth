@@ -41,6 +41,7 @@ export type JWTValidationOpts = {
   app?: string
 } & Omit<JWTVerifyOptions, 'aud' | 'algorithm'>
 
+/** Options for generating and storing a one-time password via {@link OtpFlow.generate}. */
 export type GenerateOTPOptions = {
   /**
    * Target identifier for the OTP delivery.
@@ -55,12 +56,13 @@ export type GenerateOTPOptions = {
   exp?: number
 
   /**
-   * Length of the OTP (number of digits or characters).
-   * Optional; defaults to the standard length defined in the system.
+   * Length of the OTP (number of digits).
+   * Optional; defaults to `6`.
    */
   length?: number
 }
 
+/** Options used to generate a pair of session tokens for a given subject. */
 export type AuthSessionOptions = {
   /** User or API Id. */
   subject: string
@@ -70,6 +72,7 @@ export type AuthSessionOptions = {
   payload?: Record<string, unknown>
 } & AppTokenBaseAccess
 
+/** OTP (one-time password) authentication methods exposed on `authProvider.otp`. */
 export type OtpFlow = {
   /**
    * Generates a numeric OTP and stores it in the configured cache provider.
@@ -119,6 +122,80 @@ export type OtpFlow = {
   ) => Promise<SessionTokens>
 }
 
+/** Options accepted by {@link TotpFlow.verify}/{@link TotpFlow.authenticate}. */
+export type TOTPVerifyOptions = {
+  /**
+   * Number of time steps before/after the current one to also accept, tolerating clock drift.
+   * Defaults to `1` (accepts the previous, current, and next 30s step).
+   */
+  window?: number
+  /** Unix time in seconds. Defaults to the current time. */
+  time?: number
+  /**
+   * Number of digits in the expected code. Defaults to `6`.
+   * Changing this away from `6` risks breaking compatibility with standard authenticator apps.
+   */
+  digits?: number
+  /**
+   * Time step in seconds. Defaults to `30`.
+   * Changing this away from `30` risks breaking compatibility with standard authenticator apps.
+   */
+  period?: number
+}
+
+/**
+ * TOTP (Time-based One-Time Password, RFC 6238) authentication-app 2FA methods exposed on
+ * `authProvider.totp` — compatible with authenticator apps such as Google Authenticator and
+ * Microsoft Authenticator.
+ */
+export type TotpFlow = {
+  /**
+   * Generates a new random TOTP secret for a user to enroll.
+   *
+   * @param {number} [length=20] - Number of random bytes to generate.
+   */
+  generateSecret: (length?: number) => string
+  /**
+   * Builds an `otpauth://totp/...` provisioning URI for the given secret, to render as a QR code
+   * (or hand to the user as a manual-entry key) during enrollment.
+   */
+  getProvisioningUri: (
+    /** The Base32-encoded TOTP secret, as returned by {@link TotpFlow.generateSecret}. */
+    secret: string,
+    /** The account identifier shown in the app (e.g. an email address). */
+    accountName: string,
+    /** Provisioning options (issuer, digits, period). */
+    options?: { issuer?: string; digits?: number; period?: number },
+  ) => string
+  /**
+   * Verifies a TOTP code against a secret, tolerating clock drift within `options.window`.
+   */
+  verify: (
+    /** The Base32-encoded TOTP secret. */
+    secret: string,
+    /** The code the user provides for verification. */
+    code: string,
+    options?: TOTPVerifyOptions,
+  ) => Promise<boolean>
+  /**
+   * Performs the full TOTP authentication flow and initializes the local session for the
+   * authenticated user.
+   */
+  authenticate: (
+    /** The Base32-encoded TOTP secret. */
+    secret: string,
+    /** The code the user provides for verification. */
+    code: string,
+    /**
+     * Configuration for the generated local session. Unlike {@link OtpFlow.authenticate}, this is
+     * required — a bare TOTP secret carries no natural subject the library could default to.
+     */
+    sessionOptions: AuthSessionOptions,
+    options?: TOTPVerifyOptions,
+  ) => Promise<SessionTokens>
+}
+
+/** Session lifecycle methods exposed on `authProvider.session`. */
 export type SessionFlow = {
   /**
    * Generates a pair of session tokens (access and refresh) for a given subject and context.
@@ -145,13 +222,16 @@ export type SessionFlow = {
    * @param {string} token
    * The session refresh token.
    *
-   * @returns {Promise<SessionTokens>} The generated session tokens.
+   * @returns {Promise<SessionTokens & { oldToken: string; payload: JWTPayload }>}
+   * The newly generated session tokens, along with the previous refresh token
+   * and its decoded payload.
    */
   refreshTokens: (
     token?: string,
   ) => Promise<SessionTokens & { oldToken: string; payload: JWTPayload }>
 }
 
+/** OAuth authentication methods exposed on `authProvider.google` (and other OAuth connectors). */
 export type OAuthFlow<U> = {
   /**
    * Generates the OAuth URL.
@@ -160,7 +240,7 @@ export type OAuthFlow<U> = {
    *                           Defaults to a newly generated UUID.
    * @param {string} [options.scope] - OAuth scopes to request.
    *
-   * @returns {string} The complete OAuth URL.
+   * @returns The generated OAuth URL along with the `state` used to build it.
    */
   generateAuthUrl: (options?: { state?: string; scope?: string }) => { url: string; state: string }
   /**

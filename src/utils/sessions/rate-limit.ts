@@ -19,7 +19,8 @@ let rateLimitPlanMap: Map<number, number>
  * @param {string} options.key - A unique identifier for the rate limit (e.g., user ID or IP address).
  * @param {number} options.maxRequests - The maximum number of requests allowed within the time window.
  * @param {number} options.windowSeconds - The duration of the time window in seconds during which requests are counted.
- * @param {number} [options.maxAttemptsToSave] - Maximum number of attempts to persist the rate limit state (useful in concurrent or unstable environments).
+ * @param {number} [options.maxFaildedAttempts] - Maximum number of consecutive failed (rate-limited)
+ *   attempts tracked before the failure counter is reset. Defaults to `3`.
  * @throws {Error} Throws if an error occurs while accessing or updating the rate limit data.
  */
 export async function checkRateLimit(cache: ZanixCacheProvider, options: {
@@ -95,8 +96,7 @@ export async function checkRateLimit(cache: ZanixCacheProvider, options: {
  * If RATE_LIMIT_PLANS is not defined, session.rateLimit will be used directly as the
  * number of requests allowed per RATE_LIMIT_WINDOW_SECONDS.
  *
- * @param {number} sessionRateLimit - The session rate limit information.
- * @param {number} session.rateLimit - The rate limit value that can be used as an index or as the direct limit.
+ * @param {number} sessionRateLimit - The rate limit value that can be used as an index or as the direct limit.
  *
  * @returns {number} The maximum number of requests allowed for the session within the defined time window.
  */

@@ -17,10 +17,10 @@ const initialize = async () => {
   Deno.env.set('REDIS_URI', 'redis://localhost:6379')
   Deno.env.set('JWT_KEY', 'my-secret')
 
-  await import('@zanix/datamaster') // load cache core
+  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
 
   // deno-lint-ignore no-explicit-any
-  await ProgramModule.getConnectors().get<any>('cache:redis').clear() // reset data
+  await ProgramModule.connectors.get<any>('cache:redis').clear() // reset data
 
   const context = contextMock()
 
@@ -38,8 +38,8 @@ Deno.test({
 
     context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 
-    const localDb = ProgramModule.getConnectors().get<ZanixKVConnector>('kvLocal')
-    const cache = ProgramModule.getProviders().get<ZanixCacheProvider>('cache')
+    const localDb = ProgramModule.connectors.get<ZanixKVConnector>('kvLocal')
+    const cache = ProgramModule.providers.get<ZanixCacheProvider>('cache')
     await addTokenToBlockList(token, cache, localDb)
 
     const { response } = await jwtValidationGuard()(context)
@@ -185,5 +185,43 @@ Deno.test({
     assertEquals(responseSession.headers.get('X-Znx-User-Session-Status'), 'active')
     // deno-lint-ignore no-non-null-assertion
     assert(isUUID(responseSession.headers.get('X-Znx-User-Id')!))
+  },
+})
+
+Deno.test({
+  sanitizeOps: false,
+  sanitizeResources: false,
+  name: 'jwtValidation should not overwrite the refresh-token cookie with the access token',
+  fn: async () => {
+    const context = await initialize()
+
+    const realRefreshToken = 'this-is-the-real-refresh-token-issued-at-login'
+    // Simulates a session already carrying the real refresh token, as generateSessionTokens
+    // leaves it right after login.
+    context.locals.session = {
+      id: 'session-id',
+      type: 'user',
+      rateLimit: 100,
+      token: realRefreshToken,
+    }
+
+    // A real access token always has an `exp` claim (set by createAccessToken), which is what
+    // makes `maxAge` a real positive number in getSessionHeaders instead of the `0` default.
+    const accessToken = await createJWT({}, 'my-secret', { expiration: 3600 })
+    context.req.headers.get = (name) =>
+      name === 'Authorization'
+        ? `Bearer ${accessToken}`
+        : name === 'X-Znx-Cookies-Accepted'
+        ? 'true'
+        : null
+
+    const { response } = await jwtValidationGuard({ rateLimit: false })(context)
+    assertFalse(response)
+
+    const responseSession = new Response()
+    await sessionHeadersInterceptor()(context, responseSession)
+
+    const setCookies = responseSession.headers.getSetCookie()
+    assert(!setCookies.some((cookie) => cookie.startsWith('X-Znx-App-Token=')))
   },
 })

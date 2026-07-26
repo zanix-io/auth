@@ -1,4 +1,4 @@
-import { assertEquals, assertFalse } from '@std/assert'
+import { assert, assertEquals, assertFalse } from '@std/assert'
 import { getRotatingKey, jwtKeys } from 'utils/jwt/keys-rotation.ts'
 
 // Helper: clean env vars used by these tests
@@ -145,4 +145,15 @@ Deno.test('getRotatingKey → selects rotating JWT_PRI based on cycle', () => {
   assertEquals(key.value, 'K2')
 
   Date.now = realNow // restore
+})
+
+Deno.test('getRotationCycle → defaults to 30d, parsing non-numeric TTL when unset', () => {
+  clearEnv()
+  Deno.env.set('JWT_KEY_V1', 'K1')
+  Deno.env.set('JWT_KEY_V2', 'K2')
+  // JWK_ROTATION_CYCLE intentionally left unset -> defaults to '30d'
+
+  const key = getRotatingKey('JWT_KEY')
+
+  assert(key.version === 'V1' || key.version === 'V2')
 })

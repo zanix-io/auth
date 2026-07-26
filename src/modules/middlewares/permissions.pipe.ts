@@ -8,7 +8,7 @@ import { HttpError } from '@zanix/errors'
  *
  * The pipe ensures that `ctx.session` exists and verifies whether the session
  * contains the required permissions (roles, scopes, or capability strings).
- * Access is granted only if **all** required permissions are present in
+ * Access is granted if **at least one** required permission is present in
  * `ctx.session.scope`.
  *
  * The session object is expected to follow the `Session` type:

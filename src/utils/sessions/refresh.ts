@@ -13,16 +13,16 @@ import { verifyJWT } from '../jwt/verify.ts'
 /**
  * Refreshes the session tokens using the provided JWT.
  *
- * Decodes the given token to extract its payload and generates a new
- * set of session tokens based on the existing access data.
+ * Verifies the given refresh token, then generates a new set of session
+ * tokens based on the access data embedded in its payload.
  *
  * @param {ScopedContext} ctx
  *   The scoped context containing configuration and services required
  *   for token generation.
  *
  * @param {string} [token]
- *   Optional JWT whose payload will be decoded to refresh the session.
- *   If omitted, the token will be retrieved from the current context, provided cookies are available.
+ *   Optional refresh token to verify. If omitted, the token will be retrieved
+ *   from the current context, provided cookies are available.
  *
  * @param options - Options for check block list validation
  * @param {ZanixCacheProvider} [options.cache] - Cache provider.
@@ -41,11 +41,12 @@ export const refreshSessionTokens = async (
   const { token: tokenHeader } = SESSION_HEADERS['user']
 
   const currentRefreshToken = token || ctx.cookies[tokenHeader]
-  const secret = getSecretByToken(currentRefreshToken)
 
   const { metaError, error } = invalidRefreshTokenError('refreshSessionTokens')
 
   if (!currentRefreshToken) throw error
+
+  const secret = getSecretByToken(currentRefreshToken)
 
   const payload = await verifyJWT(currentRefreshToken, secret)
 

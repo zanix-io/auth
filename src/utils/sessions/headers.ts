@@ -3,8 +3,10 @@ import type { SessionStatus, SessionTypes } from 'typings/sessions.ts'
 
 import { getAnonymousSessionId } from './anonymous.ts'
 import { GENERAL_HEADERS, SESSION_HEADERS } from 'utils/constants.ts'
+import { decodeJWT } from 'utils/jwt/decode.ts'
 
-type Headers = { 'Set-Cookie': string[] } & { [key: string]: string }
+/** The header dictionary returned by {@link getSessionHeaders} and {@link getDefaultSessionHeaders}. */
+export type Headers = { 'Set-Cookie': string[] } & { [key: string]: string }
 
 const { cookiesAcceptedHeader } = GENERAL_HEADERS
 
@@ -13,29 +15,34 @@ const { cookiesAcceptedHeader } = GENERAL_HEADERS
  * cookies when the user has granted cookie consent.
  *
  * Behavior:
- * - Always sets a session validity header and a subject header, both determined
+ * - Always sets a session status header and a subject header, both determined
  *   by the `type` option (`"user"` or `"api"`).
- * - If `cookiesAccepted` is `true`, sets a `Set-Cookie` header containing:
- *     - `<type>SessionValid=<sessionValid>`
- *     - A subject cookie name based on the session type
- *     - `Max-Age=<maxAge>` (cookie lifetime in seconds)
- *     - `Path=/`, `HttpOnly`, `SameSite=Strict`
+ * - If `cookiesAccepted` is `true`, also sets `Set-Cookie` entries for the
+ *   session status, the subject, and cookie consent itself, each with
+ *   `Max-Age=<maxAge>` (cookie lifetime in seconds), `Path=/`, `HttpOnly`,
+ *   `SameSite=Strict`. If a `refreshToken` is provided (or `maxAge` is `0`,
+ *   to clear it), a refresh-token cookie is set as well — its `Max-Age` is
+ *   derived from the refresh token's own `exp` claim, not from `maxAge`.
  * - If `cookiesAccepted` is `false`, no cookies are added.
  *
  * Defaults:
- * - `sessionValid` defaults to `"false"` if not provided.
- * - `subject` defaults to `"anonymous"`.
- * - `maxAge` defaults to `0` (immediately expires the cookie).
+ * - `sessionStatus` defaults to `"unconfirmed"` if not provided.
+ * - `maxAge` defaults to `0` (immediately expires the cookie) when `expiration` is omitted.
  *
  * @param {Object} options - Configuration for generating session-related headers.
  * @param {boolean} options.cookiesAccepted - Whether the user has accepted cookies.
- * @param {SessionStatus} [options.sessionStatus='temporal'] - Indicates whether the session is active.
- * @param {string} [options.subject='anonymous'] - The subject/user identifier included in headers and cookies.
+ * @param {SessionStatus} [options.sessionStatus='unconfirmed'] - Indicates whether the session is active.
+ * @param {string} options.subject - The subject/user identifier included in headers and cookies.
  * @param {'user' | 'api'} options.type - Determines which session and subject headers/cookies to use.
- * @param {number} [options.expiration=0] - Token expiration (Unix timestamp) used to compute the cookie’s lifetime in seconds.
- *                                          When set to `0`, the cookie is issued with `Max-Age=0`, effectively removing it.
+ * @param {number} [options.expiration=0] - The access token's expiration (Unix timestamp), used to compute
+ *                                          the `maxAge` (in seconds) for the session status/subject/cookie-consent
+ *                                          cookies. When set to `0`, those cookies are issued with `Max-Age=0`,
+ *                                          effectively removing them.
+ * @param {string} [options.refreshToken] - The refresh token to store in the `user` session's app-token cookie
+ *                                          (only applies when `type` is `'user'`). Its own `exp` claim, not
+ *                                          `expiration` above, determines that cookie's `Max-Age`.
  *
- * @returns {Record<string, string>} A dictionary of HTTP headers containing
+ * @returns {Headers} A dictionary of HTTP headers containing
  * session metadata and optionally a `Set-Cookie` header.
  */
 export function getSessionHeaders(options: {
@@ -74,8 +81,20 @@ export function getSessionHeaders(options: {
     headers['Set-Cookie'].push(`${cookiesAcceptedHeader}=true; ${baseCookieWithExp}`)
 
     if (tokenHeader && refreshToken || maxAge === 0) {
+      // The refresh-token cookie's lifetime must match the refresh token's OWN expiration
+      // (set independently, e.g. '1y' in createRefreshToken), not `maxAge` above — that one
+      // tracks the much shorter-lived access token's `exp` and would otherwise expire this
+      // cookie long before the refresh token itself stops being valid.
+      // `maxAge === 0` signals session invalidation (same as the other cookies above), so it
+      // always wins and zeroes this cookie too, regardless of the refresh token's own exp.
+      // `!refreshToken` is redundant at runtime (the `if` above guarantees it's set whenever
+      // maxAge !== 0), but TypeScript can't infer that across statements — kept for narrowing.
+      const refreshTokenMaxAge = maxAge === 0 || !refreshToken ? 0 : Math.max(
+        0,
+        Math.floor((decodeJWT(refreshToken).payload.exp ?? nowInSeconds) - nowInSeconds),
+      )
       headers['Set-Cookie'].push(
-        `${tokenHeader}=${refreshToken}; Max-Age=${24 * 30 * 365 * maxAge}; ${baseCookie}`,
+        `${tokenHeader}=${refreshToken}; Max-Age=${refreshTokenMaxAge}; ${baseCookie}`,
       )
     }
   }

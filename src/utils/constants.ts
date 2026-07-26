@@ -44,7 +44,7 @@ export const GENERAL_HEADERS = {
   cookiesAcceptedHeader: 'X-Znx-Cookies-Accepted',
 }
 
-export const DEFAULT_JWT_ISSUER = 'zanix-auth'
+export const DEFAULT_AUTH_ISSUER = 'zanix-auth'
 
 export const CACHE_KEYS = {
   jwtBlockList: 'zanix:jwt-block-list',

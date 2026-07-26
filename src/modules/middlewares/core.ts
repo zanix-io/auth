@@ -23,7 +23,8 @@ const registerMiddlewares = () => {
  *
  * This behavior ensures the default authentication middlewares are available without requiring manual setup.
  *
- * @requires defineMiddlewareDecorator
+ * @requires registerGlobalInterceptor
+ * @requires sessionHeadersInterceptor
  *
  * @module
  */

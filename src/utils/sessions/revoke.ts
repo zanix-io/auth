@@ -13,18 +13,18 @@ import { invalidRefreshTokenError } from './errors.ts'
  * This function accepts either a single token string or an array of token strings.
  * If an array is provided, all tokens are processed concurrently.
  *
- * @param {ZanixCacheProvider} cache - Cache provider.
- * @param {ZanixKVConnector} kvDb - Key-value store connector.
  * @param {string | string[]} tokenInfo - The token or tokens to revoke. Can be a single token string or an array of tokens.
- * @returns {Promise<void>} A promise that resolves once all tokens have been added to the block list.
+ * @param {ZanixCacheProvider} cache - Cache provider.
+ * @param {ZanixKVConnector} [kvDb] - Key-value store connector.
+ * @returns {Promise<JWTPayload[]>} A promise that resolves with each revoked token's decoded payload.
  *
  * @example
  * // Revoke a single token
- * await revokeTokens("abc123token")
+ * await revokeAppTokens("abc123token", cache)
  *
  * @example
  * // Revoke multiple tokens
- * await revokeTokens(["token1", "token2", "token3"])
+ * await revokeAppTokens(["token1", "token2", "token3"], cache)
  */
 export const revokeAppTokens = (
   tokenInfo: string | string[],
