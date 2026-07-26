@@ -1156,7 +1156,8 @@
       "jsr:@std/path@0.224",
       "jsr:@std/testing@1.0.16",
       "jsr:@zanix/server@2",
-      "jsr:@zanix/utils@2"
+      "jsr:@zanix/utils@2",
+      "jsr:@zanix/utils@2.4"
     ]
   }
 }
