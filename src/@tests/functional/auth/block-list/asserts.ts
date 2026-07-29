@@ -1,3 +1,5 @@
+// deno-coverage-ignore-file
+
 import { assert, assertFalse } from '@std/assert'
 import { addTokenToBlockList, checkTokenBlockList } from 'utils/sessions/block-list.ts'
 import { createJWT } from 'utils/jwt/create.ts'

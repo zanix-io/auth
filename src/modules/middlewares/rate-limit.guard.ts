@@ -1,9 +1,9 @@
 import type { RateLimitsOptions } from 'typings/sessions.ts'
-import { httpErrorResponse, type MiddlewareGlobalGuard } from '@zanix/server'
+import { httpErrorResponse, type MiddlewareGlobalGuard, RATE_LIMIT_HEADERS } from '@zanix/server'
 
 import { checkRateLimit, getRateLimitForSession } from 'utils/sessions/rate-limit.ts'
 import { generateAnonymousSession } from 'utils/sessions/anonymous.ts'
-import { CACHE_KEYS, RATE_LIMIT_HEADERS } from 'utils/constants.ts'
+import { CACHE_KEYS } from 'utils/constants.ts'
 import { HttpError } from '@zanix/errors'
 
 /**

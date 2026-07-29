@@ -3,6 +3,12 @@ import { assert, assertEquals, assertMatch } from '@std/assert'
 import { sessionHeadersInterceptor } from 'modules/middlewares/headers.interceptor.ts'
 import { createJWT } from 'utils/jwt/create.ts'
 
+// The interceptor reads `ctx.locals.session` first, falling back to `ctx.session` —
+// `@zanix/server`'s `contextSettingPipe` promotes `locals.session` there once, pre-handler, but a
+// handler-stage session change (login/refresh/revoke, via `defineLocalSession`) only ever
+// re-populates `locals.session`, never `ctx.session`. Most fixtures below set `session` directly
+// (simulating the common guard-only case, where `locals.session` is already empty by the time this
+// runs); see the dedicated tests further down for the `locals.session` fallback/precedence itself.
 function createCtx(overrides: any = {}) {
   return {
     locals: {},
@@ -33,14 +39,12 @@ Deno.test(
     const refreshToken = await createJWT({}, 'my-secret', { expiration: '1y' })
 
     const ctx = createCtx({
-      locals: {
-        session: {
-          type: 'user',
-          status: 'active',
-          subject: 'user@example.com',
-          payload: { exp: Math.floor(Date.now() / 1000) + 3600 },
-          token: refreshToken,
-        },
+      session: {
+        type: 'user',
+        status: 'active',
+        subject: 'user@example.com',
+        payload: { exp: Math.floor(Date.now() / 1000) + 3600 },
+        token: refreshToken,
       },
       req: {
         headers: { get: (key: string) => key === 'X-Znx-Cookies-Accepted' ? 'true' : null },
@@ -54,7 +58,6 @@ Deno.test(
     assert(appTokenCookie)
     // ~1 year in seconds (31536000), not the ~3600s tied to the access token's expiration.
     assertMatch(appTokenCookie, /Max-Age=3153[0-9]{4};/)
-    assert(!ctx.locals.session)
   },
 )
 
@@ -63,11 +66,31 @@ Deno.test('sessionHeadersInterceptor normalizes anonymous type, falls back to se
   const response = new Response()
 
   const ctx = createCtx({
+    session: {
+      type: 'anonymous',
+      status: 'unconfirmed',
+      id: 'anon-session-id',
+      payload: {},
+    },
+  })
+
+  const result = interceptor(ctx, response) as Response
+
+  assertEquals(result.headers.get('X-Znx-User-Id'), 'anon-session-id')
+})
+
+Deno.test('sessionHeadersInterceptor reads ctx.locals.session when ctx.session is unset', () => {
+  const interceptor = sessionHeadersInterceptor()
+  const response = new Response()
+
+  // Simulates a login/refresh/revoke handler that just called `defineLocalSession` — no prior
+  // guard populated `ctx.session` for this request, so `locals.session` is the only value present.
+  const ctx = createCtx({
     locals: {
       session: {
         type: 'anonymous',
-        status: 'unconfirmed',
-        id: 'anon-session-id',
+        status: 'active',
+        id: 'fresh-login-session-id',
         payload: {},
       },
     },
@@ -75,5 +98,25 @@ Deno.test('sessionHeadersInterceptor normalizes anonymous type, falls back to se
 
   const result = interceptor(ctx, response) as Response
 
-  assertEquals(result.headers.get('X-Znx-User-Id'), 'anon-session-id')
+  assertEquals(result.headers.get('X-Znx-User-Id'), 'fresh-login-session-id')
+})
+
+Deno.test('sessionHeadersInterceptor prefers ctx.locals.session over a stale ctx.session', () => {
+  const interceptor = sessionHeadersInterceptor()
+  const response = new Response()
+
+  // Both are set: `ctx.session` is the stale, pre-handler promoted value; `locals.session` is
+  // what a handler-stage `defineLocalSession` call (e.g. revoke/logout) set afterward. The fresher
+  // `locals.session` must win.
+  const ctx = createCtx({
+    session: { type: 'anonymous', status: 'active', id: 'stale-session-id', payload: {} },
+    locals: {
+      session: { type: 'anonymous', status: 'revoked', id: 'fresh-session-id', payload: {} },
+    },
+  })
+
+  const result = interceptor(ctx, response) as Response
+
+  assertEquals(result.headers.get('X-Znx-User-Id'), 'fresh-session-id')
+  assertEquals(result.headers.get('X-Znx-User-Session-Status'), 'revoked')
 })

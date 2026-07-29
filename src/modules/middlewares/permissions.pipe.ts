@@ -33,7 +33,16 @@ export const permissionsPipe = (
   const uniquePermissions = new Set(permissions)
 
   return (ctx) => {
-    const { locals: { session } } = ctx
+    // `ctx.locals.session` first, `ctx.session` as fallback: `@zanix/server`'s
+    // `contextSettingPipe` promotes `locals.session` to the frozen `ctx.session` once, before the
+    // pipe stage runs — under `@zanix/auth`'s own guards/handlers today, nothing re-populates
+    // `locals.session` before this pipe runs (`defineLocalSession` is only ever called from a
+    // guard, which runs pre-promotion, or from handler/interactor code, which runs after this
+    // entire pipe stage). Still checked defensively: a consuming app's own custom pipe composed
+    // alongside `@RequirePermissions` could call `defineLocalSession` itself, and pipes run
+    // concurrently (`Promise.all`) with no ordering guarantee between them — reading
+    // `locals.session` first costs nothing and stays correct either way.
+    const session = ctx.locals.session ?? ctx.session
     if (!session) {
       throw new HttpError('UNAUTHORIZED', {
         message: 'Access to this resource is not allowed.',

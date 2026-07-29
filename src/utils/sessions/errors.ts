@@ -1,4 +1,4 @@
-import { SESSION_HEADERS } from '../constants.ts'
+import { SESSION_HEADERS } from '@zanix/server'
 import { HttpError } from '@zanix/errors'
 
 export const invalidRefreshTokenError = (method: string) => {

@@ -17,6 +17,9 @@ import { jwtValidationGuard } from '../jwt-validation.guard.ts'
  * - `type: "user"` → `Authorization: Bearer <token>` (**HS256**)
  * - `type: "api"`  → `X-Znx-Authorization: Bearer <token>` (**RS256**)
  *
+ * `type` also accepts an array (e.g. `['user', 'api']`) to accept either shape on the same route —
+ * useful for an endpoint a human admin and a machine caller both need to reach.
+ *
  * If the JWT is valid and the session passes all checks, the session context is set.
  * If any validation fails, the request is denied.
  *
@@ -25,7 +28,8 @@ import { jwtValidationGuard } from '../jwt-validation.guard.ts'
  * @param options - Optional configuration for the JWT validation, including:
  *                  - `permissions`: An array of required permissions for access.
  *                  - `iss`: The expected issuer of the token.
- *                  - `type`: The authorization header type, either `"user"` or `"api"`.
+ *                  - `type`: The authorization header type, `"user"`, `"api"`, or an array of
+ *                    both to accept either shape on the same route.
  *                  - `rateLimit`: Whether to validate the session's rate limit. Defaults to `true`.
  *
  * @returns A method decorator (`ZanixGenericDecorator`) that applies the JWT validation logic

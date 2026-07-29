@@ -1,10 +1,14 @@
-import type { ScopedContext, ZanixCacheProvider, ZanixKVConnector } from '@zanix/server'
 import type { SessionTypes } from 'typings/sessions.ts'
 import type { JWTPayload } from 'typings/jwt.ts'
 
+import {
+  type ScopedContext,
+  SESSION_HEADERS,
+  type ZanixCacheProvider,
+  type ZanixKVConnector,
+} from '@zanix/server'
 import { addTokenToBlockList } from 'utils/sessions/block-list.ts'
 import { defineLocalSession } from 'utils/sessions/context.ts'
-import { SESSION_HEADERS } from 'utils/constants.ts'
 import { invalidRefreshTokenError } from './errors.ts'
 
 /**

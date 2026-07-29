@@ -1,3 +1,5 @@
+// deno-coverage-ignore-file
+
 import { assert, assertFalse } from '@std/assert'
 import { ProgramModule, type ZanixCacheProvider } from '@zanix/server'
 import { generateOTP, verifyOTP } from 'utils/otp.ts'

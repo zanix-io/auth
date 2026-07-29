@@ -57,6 +57,9 @@ Response headers may include:
 - `X-Znx-RateLimit-Reset` – seconds until the window resets
 - `Retry-After` – seconds to wait before retrying when the limit is exceeded
 
+> These names are the `RATE_LIMIT_HEADERS` constant, exported from `@zanix/server` — see
+> `@zanix/server`'s `docs/CONFIGURATION.md#auth--admin-protocol-headers` if you need the raw object.
+
 ---
 
 ## 🔄 Key Rotation
@@ -93,9 +96,13 @@ When a valid session is present, the following headers may be added to the respo
   independent of `<seconds>` above (derived from the access token's expiration, capped at 1h) used
   by the other three cookies.
 
+> These header names come from the `AUTH_HEADERS`/`SESSION_HEADERS`/`GENERAL_HEADERS` constants,
+> exported from `@zanix/server` (not from `@zanix/auth` itself) — see `@zanix/server`'s
+> `docs/CONFIGURATION.md#auth--admin-protocol-headers` if you need the raw objects.
+
 ---
 
 ## See also
 
 - [README](../README.md) — installation, core registration, and basic usage.
-- [Changelog](./CHANGELOG.md) — version history.
+- [Changelog](../CHANGELOG.md) — version history.

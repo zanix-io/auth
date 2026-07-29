@@ -2,7 +2,10 @@ import { assert, assertArrayIncludes, assertEquals, assertFalse } from '@std/ass
 
 import { jwtValidationGuard } from 'modules/middlewares/jwt-validation.guard.ts'
 import { createJWT } from 'utils/jwt/create.ts'
+import { generateRSAKeys } from '@zanix/helpers'
 import { contextMock } from '../mocks.ts'
+
+console.error = () => {}
 
 Deno.test('jwtValidation shoud return an error wihout session', async () => {
   const context = contextMock()
@@ -220,4 +223,62 @@ Deno.test('jwtValidation shoud return an error with api session', async () => {
 
   assertEquals(data.message, 'X-Znx-Authorization token is missing or invalid.')
   assertEquals(response?.headers.get('x-znx-api-session-status'), 'failed')
+})
+
+// Stubs the blocklist's cache/kv lookups (unrelated to the guard's own type-selection logic) so
+// these tests can reach a genuine success without wiring up real DI providers — covers both the
+// local and the Redis-backed path (`checkTokenBlockList` branches on `REDIS_URI`, which another
+// test file running earlier in the same process may have left set).
+const stubBlockListLookup = (context: ReturnType<typeof contextMock>) => {
+  const fakeCache = { local: new Map(), getCachedOrFetch: () => Promise.resolve(false) }
+  context.providers.get = () => fakeCache as never
+  context.connectors.get = () => ({ get: () => undefined } as never)
+}
+
+Deno.test('jwtValidation type array: picks user when only Authorization is sent', async () => {
+  const context = contextMock()
+  stubBlockListLookup(context)
+  const token = await createJWT({}, 'my-secret')
+  Deno.env.set('JWT_KEY', 'my-secret')
+  context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
+
+  const { response } = await jwtValidationGuard({ type: ['api', 'user'], rateLimit: false })(
+    context,
+  )
+
+  assertEquals(response, undefined)
+  assertEquals(context.locals.session?.type, 'user')
+
+  Deno.env.delete('JWT_KEY')
+})
+
+Deno.test('jwtValidation type array: picks api when only X-Znx-Authorization is sent', async () => {
+  const context = contextMock()
+  stubBlockListLookup(context)
+  const { privateKey, publicKey } = await generateRSAKeys()
+  const token = await createJWT({}, privateKey, { algorithm: 'RS256' })
+  Deno.env.set('JWK_PUB', btoa(publicKey))
+  context.req.headers.get = (name) => name === 'X-Znx-Authorization' ? `Bearer ${token}` : null
+
+  const { response } = await jwtValidationGuard({ type: ['api', 'user'], rateLimit: false })(
+    context,
+  )
+
+  assertEquals(response, undefined)
+  assertEquals(context.locals.session?.type, 'api')
+
+  Deno.env.delete('JWK_PUB')
+})
+
+Deno.test('jwtValidation type array: reports first type when no header is sent', async () => {
+  const context = contextMock()
+
+  const { response: apiFirst } = await jwtValidationGuard({ type: ['api', 'user'] })(context)
+  assertEquals(
+    (await apiFirst?.json()).message,
+    'X-Znx-Authorization token is missing or invalid.',
+  )
+
+  const { response: userFirst } = await jwtValidationGuard({ type: ['user', 'api'] })(context)
+  assertEquals((await userFirst?.json()).message, 'Authorization token is missing or invalid.')
 })

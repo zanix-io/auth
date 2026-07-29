@@ -40,7 +40,21 @@ import {
  */
 export const sessionHeadersInterceptor = (): MiddlewareInterceptor => {
   return (ctx, response) => {
-    const { locals: { session }, req: { headers }, cookies } = ctx
+    // `ctx.locals.session` first, `ctx.session` as fallback: `@zanix/server`'s
+    // `contextSettingPipe` promotes `locals.session` to the frozen `ctx.session` exactly once,
+    // during the pipe phase, before this interceptor runs — but that's only the *initial* value.
+    // Handler-stage session changes (login/OTP/TOTP/OAuth2 `generateTokens`, `refreshTokens`,
+    // `revokeToken`) all go through `defineLocalSession`, which only ever writes
+    // `ctx.locals.session` (never `ctx.session`, which stays frozen from the pre-handler
+    // promotion). Since this interceptor is global and runs on every response — including the
+    // login/refresh/revoke endpoints that mint or invalidate a session mid-request — reading only
+    // `ctx.session` would miss that fresher value entirely: a login response would carry no
+    // session headers/cookies at all, a refresh response would omit the rotated refresh token, and
+    // a revoke/logout response would report the pre-revocation status. `locals.session` is only
+    // ever populated again if something set it after the promotion, so checking it first is always
+    // safe and always the more current value when present.
+    const { req: { headers }, cookies } = ctx
+    const session = ctx.locals.session ?? ctx.session
     if (!session?.type) return response
 
     const cookiesAccepted = checkAcceptedCookies(headers, cookies)
@@ -63,8 +77,6 @@ export const sessionHeadersInterceptor = (): MiddlewareInterceptor => {
     for (const header of Object.entries(sessionHeaders)) {
       response.headers.append(...header)
     }
-
-    delete ctx.locals.session
 
     return response
   }

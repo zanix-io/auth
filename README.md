@@ -88,6 +88,15 @@ It provides a **unified and extensible system** for:
   - Also available bound to the default provider: `this.providers.get('auth').session` —
     `.generateTokens()`, `.refreshTokens()`, `.revokeToken()`.
 
+- **Service-Credential Exchange (Machine-to-Machine)**
+  - `createServiceAssertion()`: a calling service signs a short-lived self-assertion with its own
+    keypair — no shared secret, no human-shaped session.
+  - `exchangeServiceCredential()`: verifies the assertion against a registered `JWK_PUB_<serviceId>`
+    and mints a real `type: 'api'` access token, scoped to whatever
+    `SERVICE_PERMISSIONS_<serviceId>`/`SERVICE_RATE_LIMIT_<serviceId>` the operator configured —
+    never anything the caller requests. See
+    [Service-Credential Exchange Guide](./docs/service-credential.md).
+
 - **Block List**
   - `addTokenToBlockList(token, cache, kvDb?)`: add a JWT to the blocklist (by its `jti`, extracted
     internally).
@@ -118,12 +127,14 @@ It provides a **unified and extensible system** for:
   - `sessionHeadersInterceptor`: injects session headers.
   - `jwtValidationGuard`: validates JWT tokens in incoming requests.
   - `rateLimitGuard`: applies rate limiting.
+  - `ipAllowlistGuard`: restricts access to configured IP addresses or CIDR ranges.
   - `permissionsPipe`: validates permissions before executing route logic.
 
 - **Decorators**
   - `AuthTokenValidation`: ensures that a method or route requires a valid token.
   - `RequirePermissions`: requires specific permissions or scopes.
   - `RateLimitGuard`: limits request rates at the method level.
+  - `IpAllowlistGuard`: restricts controllers to configured IP addresses or CIDR ranges.
 
 ---
 
@@ -233,13 +244,13 @@ key rotation, and the session response headers/cookies added to responses are al
 
 ## 🕒 Changelog
 
-See [`CHANGELOG`](./docs/CHANGELOG.md) for the version history.
+See [`CHANGELOG`](./CHANGELOG.md) for the version history.
 
 ---
 
 ## 📜 License
 
-Licensed under the **MIT License**. See the [`LICENSE`](./docs/LICENSE) file for details.
+Licensed under the **MIT License**. See the [`LICENSE`](./LICENSE) file for details.
 
 ---
 
@@ -249,6 +260,10 @@ Licensed under the **MIT License**. See the [`LICENSE`](./docs/LICENSE) file for
   TOTP 2FA, and permissions/scopes.
 - [Configuration Guide](./docs/configuration.md) — environment variables, rate limiting, key
   rotation, session response headers.
+- [IP Allowlisting Guide](./docs/network.md) — configuring IP restrictions, CIDR ranges, trusted
+  proxy headers, and security considerations.
+- [Service-Credential Exchange Guide](./docs/service-credential.md) — machine-to-machine
+  authentication, key registration, and permission/rate-limit configuration.
 - [Zanix Framework](https://github.com/zanix-io)
 - [Deno Documentation](https://deno.com)
 - Repository: [https://github.com/zanix-io/auth](https://github.com/zanix-io/auth)

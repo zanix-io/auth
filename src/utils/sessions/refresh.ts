@@ -1,9 +1,13 @@
-import type { ScopedContext, ZanixCacheProvider, ZanixKVConnector } from '@zanix/server'
 import type { SessionTokens } from 'typings/sessions.ts'
 import type { JWTPayload } from 'typings/jwt.ts'
 
+import {
+  type ScopedContext,
+  SESSION_HEADERS,
+  type ZanixCacheProvider,
+  type ZanixKVConnector,
+} from '@zanix/server'
 import { HttpError, PermissionDenied } from '@zanix/errors'
-import { SESSION_HEADERS } from 'utils/constants.ts'
 import { checkTokenBlockList } from './block-list.ts'
 import { getSecretByToken } from '../jwt/secrets.ts'
 import { generateSessionTokens } from './create.ts'

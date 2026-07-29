@@ -15,35 +15,6 @@ export const JWT_ALGTHM: Record<
 
 export const IP_REGEX = /^(\d{1,3}\.){3}\d{1,3}$/
 
-export const AUTH_HEADERS = {
-  api: 'X-Znx-Authorization',
-  user: 'Authorization',
-}
-
-export const SESSION_HEADERS = {
-  api: {
-    sub: 'X-Znx-Api-Id',
-    session: 'X-Znx-Api-Session-Status',
-    token: undefined,
-  },
-  user: {
-    sub: 'X-Znx-User-Id',
-    session: 'X-Znx-User-Session-Status',
-    token: 'X-Znx-App-Token',
-  },
-}
-
-export const RATE_LIMIT_HEADERS = {
-  limitHeader: 'X-Znx-RateLimit-Limit',
-  remainingHeader: 'X-Znx-RateLimit-Remaining',
-  resetHeader: 'X-Znx-RateLimit-Reset',
-  retryAfterHeader: 'Retry-After',
-}
-
-export const GENERAL_HEADERS = {
-  cookiesAcceptedHeader: 'X-Znx-Cookies-Accepted',
-}
-
 export const DEFAULT_AUTH_ISSUER = 'zanix-auth'
 
 export const CACHE_KEYS = {
@@ -51,3 +22,16 @@ export const CACHE_KEYS = {
   rateLimit: 'zanix:rate-limit',
   otp: 'zanix:otp',
 }
+
+/**
+ * Fixed `aud` claim every service-credential assertion/exchange (see
+ * `utils/sessions/service-exchange.ts`) is scoped to — prevents a self-signed assertion crafted
+ * for this exchange from being replayed as some other kind of token, and vice versa.
+ */
+export const SERVICE_EXCHANGE_AUDIENCE = 'zanix:auth:service-exchange'
+
+/** Default lifetime of a self-signed service assertion — kept short since it's presented once. */
+export const SERVICE_ASSERTION_DEFAULT_EXP = '2m'
+
+/** Default lifetime of the `type: 'api'` access token minted by a successful exchange. */
+export const SERVICE_TOKEN_DEFAULT_EXP = '30m'

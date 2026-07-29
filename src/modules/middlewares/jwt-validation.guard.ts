@@ -1,8 +1,8 @@
 import type { JWTValidationOpts } from 'typings/auth.ts'
-import type { SessionStatus } from 'typings/sessions.ts'
+import type { SessionStatus, SessionTypes } from 'typings/sessions.ts'
 
-import { AUTH_HEADERS, DEFAULT_AUTH_ISSUER } from 'utils/constants.ts'
-import { httpErrorResponse, type MiddlewareGlobalGuard } from '@zanix/server'
+import { DEFAULT_AUTH_ISSUER } from 'utils/constants.ts'
+import { AUTH_HEADERS, httpErrorResponse, type MiddlewareGlobalGuard } from '@zanix/server'
 import { checkTokenBlockList } from 'utils/sessions/block-list.ts'
 import { defineLocalSession } from 'utils/sessions/context.ts'
 import { HttpError, PermissionDenied } from '@zanix/errors'
@@ -37,6 +37,11 @@ import {
  *
  * This distinction ensure that **HMAC** is used for user-based authentication and **RSA** for API authentication,
  * providing appropriate security measures based on the request type.
+ *
+ * `type` also accepts an array (e.g. `['user', 'api']`) to accept either shape on the same route —
+ * the first configured type whose own header carries a Bearer token is the one the request is
+ * validated against; if none of them do, the request is rejected the same way a single `type`
+ * would be (mentioning that first configured type's header).
  *
  * ## Key Resolution
  * The guard automatically loads the signing/verification key from environment variables:
@@ -80,10 +85,14 @@ import {
  *        Required audience or permissions the caller must have.
  *        Mapped to the JWT `aud` claim. Optional.
  *
- * @param {"api"|"user"} [options.type="user"]
+ * @param {"api"|"user"|("api"|"user")[]} [options.type="user"]
  *        Determines which header is inspected and which key is used.
  *        - `"user"` → `Authorization` header and `JWT_KEY` env variables.
  *        - `"api"`  → `X-Znx-Authorization` header and `JWK_PUB` env variables.
+ *        - An array (e.g. `['user', 'api']`) accepts either shape on the same route: the first
+ *          configured type whose own header actually carries a Bearer token is the one this
+ *          request is validated against. Useful for an endpoint a human admin and a machine caller
+ *          both need to reach without registering two separate routes.
  *
  * @param {string} [options.encryptionKey]
  *        Optional key used to decrypt sensitive payload fields.
@@ -120,28 +129,47 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
     app,
     sub,
     permissions,
-    type = 'user',
+    type: configuredType = 'user',
     iss = DEFAULT_AUTH_ISSUER,
     encryptionKey,
     algorithm,
     rateLimit = true,
   } = options
 
-  const authHeaderKey = AUTH_HEADERS[type]
+  // Spreading (rather than assigning `configuredType` directly) sidesteps a TS narrowing quirk:
+  // `Array.isArray`'s guard doesn't cleanly narrow a union mixing mutable and `readonly` array
+  // members, which otherwise left `types` (and everything derived from it below) implicitly `any`.
+  const types: SessionTypes[] = Array.isArray(configuredType)
+    ? [...configuredType]
+    : [configuredType]
 
   const rateLimitFn = rateLimitGuard({ anonymousLimit: 0, app }) // user must be authenticated
 
   return async (ctx) => {
     const { req: { headers: ctxHeaders }, cookies } = ctx
-    const authHeader = ctxHeaders.get(authHeaderKey)
+    // Multiple `type`s means either shape is accepted on the same route (e.g. a human admin's
+    // `Authorization` token or a machine's `X-Znx-Authorization` one) — the first configured type
+    // whose own header actually carries a Bearer value is the one this request is validated
+    // against; falls back to the first configured type (today's single-`type` error shape) when
+    // none of them sent anything. Each header is only ever read once here (not re-fetched below).
+    const candidates = types.map((candidateType) => ({
+      type: candidateType,
+      authHeader: ctxHeaders.get(AUTH_HEADERS[candidateType]),
+    }))
+    const matched = candidates.find((candidate) => candidate.authHeader?.startsWith('Bearer '))
+    const { type } = matched ?? candidates[0]
+    const authHeaderKey = AUTH_HEADERS[type]
     const cookiesAccepted = checkAcceptedCookies(ctxHeaders, cookies)
 
     const defaultSessionOpts = { type, cookiesAccepted, headers: ctxHeaders, cookies }
     const clientSubject = getClientSubject(ctxHeaders, cookies, type)
 
-    const token = authHeader?.slice(7).trim()
+    // `matched` already proved its own `authHeader` starts with "Bearer " — no need to re-check
+    // that here, only whether anything (non-blank) followed it. No candidate matching means no
+    // valid token was sent by any configured type; nothing left worth slicing.
     // deno-lint-ignore no-non-null-assertion
-    if (!token || !authHeader!.startsWith('Bearer ')) {
+    const token = matched ? matched.authHeader!.slice(7).trim() : undefined
+    if (!token) {
       const { 'Set-Cookie': cookies, ...baseHeaders } = await getDefaultSessionHeaders({
         ...defaultSessionOpts,
         sessionStatus: 'failed',

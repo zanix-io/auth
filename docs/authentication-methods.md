@@ -143,4 +143,4 @@ by default to tolerate clock drift. `issuer` defaults to `'zanix-auth'` when omi
 - [README](../README.md) — installation, core registration, and the flagship Google OAuth2 example.
 - [Configuration Guide](./configuration.md) — environment variables, rate limiting, key rotation,
   session response headers.
-- [Changelog](./CHANGELOG.md) — version history.
+- [Changelog](../CHANGELOG.md) — version history.

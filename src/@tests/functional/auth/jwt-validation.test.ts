@@ -1,4 +1,10 @@
-import { ProgramModule, type ZanixCacheProvider, type ZanixKVConnector } from '@zanix/server'
+import {
+  GENERAL_HEADERS,
+  ProgramModule,
+  SESSION_HEADERS,
+  type ZanixCacheProvider,
+  type ZanixKVConnector,
+} from '@zanix/server'
 
 import { jwtValidationGuard } from 'modules/middlewares/jwt-validation.guard.ts'
 import { createJWT } from 'utils/jwt/create.ts'
@@ -8,7 +14,6 @@ import { assert, assertArrayIncludes, assertEquals, assertFalse } from '@std/ass
 import { isUUID } from '@zanix/validator'
 import { generateRSAKeys } from '@zanix/helpers'
 import { sessionHeadersInterceptor } from 'modules/middlewares/headers.interceptor.ts'
-import { GENERAL_HEADERS, SESSION_HEADERS } from 'utils/constants.ts'
 
 console.warn = () => {}
 console.info = () => {}
@@ -64,6 +69,9 @@ Deno.test({
     const { response } = await jwtValidationGuard({ rateLimit: false })(context)
 
     assertFalse(response)
+    // Simulates `@zanix/server`'s `contextSettingPipe`, which always promotes `locals.session` to
+    // the frozen `ctx.session` between the guard phase and any interceptor.
+    context.session = context.locals.session as never
 
     const responseSession = new Response()
     await sessionHeadersInterceptor()(context, responseSession)
@@ -150,6 +158,7 @@ Deno.test({
       context,
     )
     assertFalse(response)
+    context.session = context.locals.session as never // see the earlier test's own comment
 
     const responseSession = new Response()
     await sessionHeadersInterceptor()(context, responseSession)
@@ -178,6 +187,7 @@ Deno.test({
       context,
     )
     assertFalse(response)
+    context.session = context.locals.session as never // see the earlier test's own comment
 
     const responseSession = new Response()
     await sessionHeadersInterceptor()(context, responseSession)
@@ -217,6 +227,7 @@ Deno.test({
 
     const { response } = await jwtValidationGuard({ rateLimit: false })(context)
     assertFalse(response)
+    context.session = context.locals.session as never // see the earlier test's own comment
 
     const responseSession = new Response()
     await sessionHeadersInterceptor()(context, responseSession)

@@ -7,6 +7,120 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-28
+
+### Added
+
+- `ipAllowlistGuard` — a middleware guard restricting access to a configured allowlist of exact IPs
+  or CIDR ranges, resolved from the request's real client IP (`trustProxyHeader`-gated, to avoid
+  blindly trusting a spoofable proxy header) or explicit `allow` entries. `IpAllowlistGuard`
+  decorator applies it declaratively at the controller/method level; `IpAllowlistOptions` configures
+  it. Falls back to the `ADMIN_IP_ALLOWLIST` env var when no explicit configuration is given.
+  Rejects out-of-allowlist requests with **403 Forbidden**. See `docs/network.md`.
+- `createServiceAssertion()`/`exchangeServiceCredential()` — see `docs/service-credential.md` —
+  machine-to-machine authentication without a shared secret or a human-shaped session. A calling
+  service signs a short-lived self-assertion with its own keypair (`createServiceAssertion`), and
+  `exchangeServiceCredential` verifies it against `JWK_PUB_<serviceId>` (reusing the existing
+  `kid`-based key resolution, no new registry concept) before minting a real `type: 'api'` access
+  token via the existing `createAppToken`. Granted permissions come only from the
+  operator-configured `SERVICE_PERMISSIONS_<serviceId>`, never from the caller — same for rate
+  limiting: `SERVICE_RATE_LIMIT_<serviceId>` sets the minted token's `rateLimit` claim, falling back
+  to `createAppToken`'s own default (`100`) otherwise, the same default a `type: 'user'` session
+  gets. `rateLimitGuard` already applies to `api` sessions exactly the same way it does to `user`
+  ones (no type-specific branch), so this makes the two paths fully consistent. Exported as plain
+  functions, not a mounted route — a consumer wires its own single handler around
+  `exchangeServiceCredential`, same as it already does for `@zanix/core`'s
+  `TemplatesAdminRepository`/`Service`.
+- `createServiceAssertion()`'s new optional `keyId` option, plus `JWK_PUB_<serviceId>_<keyId>` as an
+  alternative to the bare `JWK_PUB_<serviceId>` registration — supports rotating a calling service's
+  own assertion-signing key with a real overlap window (old and new key both registered and valid at
+  once, no deploy-ordering requirement). `keyId` defaults to `serviceId` when omitted, reproducing
+  today's single-key behavior unchanged; it only ever selects which registered key verifies the
+  assertion — identity (`iss`/`sub`, always `serviceId`) and granted permissions/rate limit (always
+  keyed by `serviceId` alone) are unaffected, and a key registered under one `serviceId` can never
+  authenticate as a different one. See `docs/service-credential.md`'s new "Rotating a Service's Key"
+  section for the step-by-step procedure.
+
+### Changed
+
+- `AuthTokenValidation`/`jwtValidationGuard`'s `type` option now also accepts an array (e.g.
+  `type: ['user', 'api']`) to accept either token shape on the same route — the first configured
+  type whose own header (`Authorization` for `user`, `X-Znx-Authorization` for `api`) actually
+  carries a Bearer token is the one the request is validated against. Passing a single value keeps
+  today's exact behavior.
+- `AUTH_HEADERS`, `SESSION_HEADERS`, `RATE_LIMIT_HEADERS`, and `GENERAL_HEADERS` moved to
+  `@zanix/server` (which `@zanix/auth` already depends on) to eliminate duplicate/diverging copies
+  of the same header names across `@zanix/auth`, `@zanix/core`, and `@zanix/notifications`. This is
+  an internal change only — `@zanix/auth`'s own public exports (`userSessionHeaders`,
+  `apiSessionHeaders`, `rateLimitGuard`, etc.) are unaffected. See `@zanix/server`'s
+  `docs/CONFIGURATION.md#auth--admin-protocol-headers`.
+- Anonymous session IP resolution now uses the shared `getClientIp()` helper instead of manually
+  parsing proxy headers, centralizing client IP extraction across the framework.
+
+### Fixed
+
+- **`sessionHeadersInterceptor` never actually added session response headers/cookies on a
+  successful request, and `permissionsPipe`/`@RequirePermissions` rejected every request with "No
+  active user session" regardless of whether the caller was authenticated.** Both read
+  `ctx.locals.session`, but `@zanix/server`'s `contextSettingPipe` always promotes it to the frozen
+  `ctx.session` (and deletes `locals.session`) between the guard phase and any pipe/interceptor — so
+  by the time either of these ran, `locals.session` was already gone. Confirmed with a minimal
+  reproduction exercising the real guard → pipe → interceptor order. `rate-limit.guard.ts` was never
+  affected — it runs during the guard phase, before the promotion happens. **Follow-up:** reading
+  only `ctx.session` turned out to be incomplete — `contextSettingPipe`'s promotion is one-shot,
+  happening once before the pipe stage, but `defineLocalSession` is also called from handler-stage
+  code (`generateSessionTokens`/`refreshSessionTokens`/ `revokeSessionToken`, i.e.
+  login/OTP/TOTP/OAuth2/refresh/revoke), which runs _after_ that promotion and only ever writes
+  `ctx.locals.session`, never `ctx.session`. Since `sessionHeadersInterceptor` is registered
+  globally and runs on every response, this meant a login response carried no session cookie at all,
+  a refresh response omitted the rotated refresh token, and a revoke/logout response reported the
+  stale pre-revocation status. Both now check `ctx.locals.session` first (the freshest value, when
+  something re-set it after the initial promotion) and fall back to `ctx.session` otherwise. For
+  `permissionsPipe` this is a defensive fallback only — nothing in `@zanix/auth` itself re-populates
+  `locals.session` before it runs — but costs nothing and protects a consuming app's own custom pipe
+  composed alongside `@RequirePermissions`.
+- `getSessionHeaders` pushed a malformed `undefined=undefined; Max-Age=0; ...` cookie for
+  `type:
+  'api'` responses whenever `cookiesAccepted` was true and `maxAge` was `0` (the default on
+  every auth failure, via `getDefaultSessionHeaders`, which never passes `expiration`) — an operator
+  precedence bug (`tokenHeader && refreshToken || maxAge === 0`) let the `maxAge === 0` branch fire
+  even when `tokenHeader` (`SESSION_HEADERS.api.token`) is `undefined`. Fixed to
+  `tokenHeader &&
+  (refreshToken || maxAge === 0)`. Decided not to give `SESSION_HEADERS.api.token`
+  a real value instead (the ADR's own open question) — `type: 'api'` sessions have no refresh-token
+  concept at all under `exchangeServiceCredential`'s design, so there's nothing meaningful for it to
+  carry.
+- `JWTValidationOpts.type` didn't accept a `readonly` array, only a mutable `SessionTypes[]` —
+  masked by the test suite always running with `--no-check` (`deno test` doesn't type-check by
+  default), but a real `deno check`/JSR-publish failure for any consumer declaring its `type: [...]`
+  array as a shared `as const` constant (the exact pattern `@zanix/core`'s and `@zanix/admin`'s own
+  admin controllers use). Widened to `SessionTypes | SessionTypes[] | readonly SessionTypes[]`.
+- Widening `type` above (previous entry) then exposed a second, related `deno check` failure inside
+  `jwtValidationGuard` itself: `Array.isArray`'s type guard doesn't cleanly narrow a union mixing
+  mutable and `readonly` array members, silently leaving the resolved `type`/`authHeaderKey`
+  implicitly `any` — no runtime impact (this only affects static type-checking), but still a real
+  `deno check` failure. Fixed by normalizing via `[...configuredType]` (spread) instead of relying
+  on the narrowed assignment directly.
+
+### Security
+
+- `ipAllowlistGuard` requires `trustProxyHeader: true` explicitly before it will read a client IP
+  from any proxy header — it never trusts one implicitly, since a spoofable header would otherwise
+  defeat the allowlist entirely.
+- **Resolved** the previously-documented rotation asymmetry between `exchangeServiceCredential`'s
+  two keys: the calling service's own registered key now supports the same kind of overlap-window
+  rotation `@zanix/auth`'s own `JWK_PRI`/`JWK_PUB` already had, via the new
+  `JWK_PUB_<serviceId>_
+  <keyId>` form (see the `Added` entry above) — no more atomic env-var-swap
+  requirement or deploy-ordering window. The two rotation mechanisms remain fully independent:
+  rotating a calling service's key never invalidates an access token it already minted, and vice
+  versa; a key registered under one `serviceId` can never authenticate as a different one,
+  regardless of `keyId` collisions between services. Covered by `service-exchange.test.ts`: old key
+  valid while registered, new key valid once registered, both valid simultaneously during a rotation
+  overlap window, the old key rejected once retired, an unknown `keyId` rejected, a `sub`/`iss`
+  mismatch rejected, and an already-minted access token proven to survive its issuing service's key
+  rotation — plus the pre-existing mint→verify round trip through a rotated `JWK_PRI_V1` end to end.
+
 ## [0.4.0] - 2026-02-04
 
 ### Removed

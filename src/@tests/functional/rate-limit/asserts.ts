@@ -1,10 +1,11 @@
+// deno-coverage-ignore-file
+
 import { assert, assertAlmostEquals, assertEquals, assertFalse } from '@std/assert'
 
 import { sessionHeadersInterceptor } from 'modules/middlewares/headers.interceptor.ts'
 import { rateLimitGuard } from 'modules/middlewares/rate-limit.guard.ts'
 import { contextMock } from '../../mocks.ts'
-import { RATE_LIMIT_HEADERS } from 'utils/constants.ts'
-import { ProgramModule } from '@zanix/server'
+import { ProgramModule, RATE_LIMIT_HEADERS } from '@zanix/server'
 import { stub } from '@std/testing/mock'
 
 export const addValidHeaders = async (cache: 'cache:local' | 'cache:redis') => {
@@ -27,10 +28,12 @@ export const addValidSessionHeaders = async () => {
 
   const guard = rateLimitGuard({ app: 'test' })
   await guard(context)
+  // Simulates `@zanix/server`'s `contextSettingPipe`, which always promotes `locals.session` to
+  // the frozen `ctx.session` between the guard phase and any interceptor.
+  context.session = context.locals.session as never
   const response = new Response()
   await sessionHeadersInterceptor()(context, response)
 
-  assertFalse(context.locals.session)
   assert(response.headers.get('X-Znx-User-Id')?.startsWith('anonymous-'))
   assertEquals(response.headers.get('X-Znx-User-Session-Status'), 'unconfirmed')
 }

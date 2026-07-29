@@ -1,6 +1,6 @@
 import type { HandlerContext, Session } from '@zanix/server'
 
-import { base64ToUint8Array, generateHash, uint8ArrayToHEX } from '@zanix/helpers'
+import { base64ToUint8Array, generateHash, getClientIp, uint8ArrayToHEX } from '@zanix/helpers'
 import { IP_REGEX } from 'utils/constants.ts'
 
 /**
@@ -15,10 +15,7 @@ export const getAnonymousSessionId = async (
   headers: HandlerContext['req']['headers'],
 ) => {
   // Extract IP from common headers
-  let ip = headers.get('x-forwarded-for')?.split(',')[0].trim() ||
-    headers.get('cf-connecting-ip') ||
-    headers.get('x-real-ip') ||
-    'unknown-ip'
+  let ip = getClientIp(headers)
 
   // Optionally validate IP format (simple regex)
   if (!IP_REGEX.test(ip) && ip !== 'unknown-ip') {

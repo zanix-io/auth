@@ -29,8 +29,13 @@ export type JWTValidationOpts = {
    *
    * - `type: "user"` → **HS256**
    * - `type: "api"`  → **RS256**
+   *
+   * Can also be an array (e.g. `['user', 'api']`) to accept either shape on the same route — the
+   * first configured type whose own header actually carries a Bearer token is the one the request
+   * is validated against. Accepts a `readonly` array too, so a module-level `as const` tuple (the
+   * common pattern for a shared constant) can be passed directly without widening it first.
    */
-  type?: SessionTypes
+  type?: SessionTypes | SessionTypes[] | readonly SessionTypes[]
   /** Specify an algorithm only if it differs from the project standard. */
   algorithm?: JWTAlgorithm
   /**

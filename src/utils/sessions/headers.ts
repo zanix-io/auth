@@ -1,8 +1,7 @@
-import type { HandlerContext } from '@zanix/server'
 import type { SessionStatus, SessionTypes } from 'typings/sessions.ts'
 
+import { GENERAL_HEADERS, type HandlerContext, SESSION_HEADERS } from '@zanix/server'
 import { getAnonymousSessionId } from './anonymous.ts'
-import { GENERAL_HEADERS, SESSION_HEADERS } from 'utils/constants.ts'
 import { decodeJWT } from 'utils/jwt/decode.ts'
 
 /** The header dictionary returned by {@link getSessionHeaders} and {@link getDefaultSessionHeaders}. */
@@ -80,7 +79,7 @@ export function getSessionHeaders(options: {
     headers['Set-Cookie'].push(`${subjectHeader}=${subject}; ${baseCookieWithExp}`)
     headers['Set-Cookie'].push(`${cookiesAcceptedHeader}=true; ${baseCookieWithExp}`)
 
-    if (tokenHeader && refreshToken || maxAge === 0) {
+    if (tokenHeader && (refreshToken || maxAge === 0)) {
       // The refresh-token cookie's lifetime must match the refresh token's OWN expiration
       // (set independently, e.g. '1y' in createRefreshToken), not `maxAge` above — that one
       // tracks the much shorter-lived access token's `exp` and would otherwise expire this

@@ -1,6 +1,11 @@
 // deno-lint-ignore-file no-explicit-any
 import { assert, assertEquals, assertFalse, assertRejects } from '@std/assert'
-import { ProgramModule, type ZanixCacheProvider, type ZanixKVConnector } from '@zanix/server'
+import {
+  ProgramModule,
+  SESSION_HEADERS,
+  type ZanixCacheProvider,
+  type ZanixKVConnector,
+} from '@zanix/server'
 import { PermissionDenied } from '@zanix/errors'
 
 import { generateSessionTokens } from 'utils/sessions/create.ts'
@@ -9,7 +14,6 @@ import { revokeSessionToken } from 'utils/sessions/revoke.ts'
 import { checkTokenBlockList } from 'utils/sessions/block-list.ts'
 import { jwtValidationGuard } from 'modules/middlewares/jwt-validation.guard.ts'
 import { sessionHeadersInterceptor } from 'modules/middlewares/headers.interceptor.ts'
-import { SESSION_HEADERS } from 'utils/constants.ts'
 import { contextMock } from '../../mocks.ts'
 
 console.warn = () => {}
@@ -35,7 +39,15 @@ Deno.test({
     const cache = ProgramModule.providers.get<ZanixCacheProvider>('cache')
     const kvDb = ProgramModule.connectors.get<ZanixKVConnector>('kvLocal')
 
-    // 1. LOGIN — mints the real session tokens.
+    // 1. LOGIN — mints the real session tokens. Unlike a guard, `generateSessionTokens` runs at
+    // handler stage: `@zanix/server`'s one-time `contextSettingPipe` promotion already happened
+    // *before* the login handler executed (there's no prior guard for an anonymous login request,
+    // so it promoted nothing). `generateSessionTokens` (via `defineLocalSession`) only ever writes
+    // `ctx.locals.session`, never `ctx.session` — so, correctly, `loginCtx.session` is left
+    // untouched here (staying unset, exactly as it would after a no-op pre-handler promotion), and
+    // `sessionHeadersInterceptor` must read the fresher `locals.session` to produce the cookie at
+    // all. This is exactly the scenario that was broken before `sessionHeadersInterceptor` started
+    // checking `locals.session` first.
     const loginCtx = contextMock()
     loginCtx.req.headers.get = (name) => name === 'X-Znx-Cookies-Accepted' ? 'true' : null
     const loginTokens = await generateSessionTokens(loginCtx, { subject: 'user@example.com' })
@@ -65,6 +77,11 @@ Deno.test({
 
     const { response: guardResponse } = await jwtValidationGuard({ rateLimit: false })(authedCtx)
     assertFalse(guardResponse)
+    // Unlike the login step above, a guard runs *before* `contextSettingPipe`'s promotion, so
+    // simulating the promotion immediately after the guard call (and before the interceptor) is
+    // the correct timing here — nothing re-populates `locals.session` afterward in a plain
+    // authenticated request.
+    authedCtx.session = authedCtx.locals.session as never
 
     const authedResponse = new Response()
     await sessionHeadersInterceptor()(authedCtx, authedResponse)

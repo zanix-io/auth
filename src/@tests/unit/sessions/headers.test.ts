@@ -120,6 +120,22 @@ Deno.test('getSessionHeaders handles API type correctly', () => {
   assertEquals(headers['X-Znx-Api-Session-Status'], 'unconfirmed')
 })
 
+Deno.test('getSessionHeaders never sets a token cookie for api type, even at Max-Age=0', () => {
+  // `SESSION_HEADERS.api.token` is `undefined` — `api` sessions have no refresh-token concept (see
+  // `docs/service-credential.md`). `maxAge === 0` (the default here, and what every auth-failure
+  // response uses via `getDefaultSessionHeaders`) must not bypass that and push a stray
+  // `undefined=undefined` cookie.
+  const { 'Set-Cookie': cookies } = getSessionHeaders({
+    cookiesAccepted: true,
+    type: 'api',
+    subject: 'anonymous',
+    sessionStatus: 'failed',
+  })
+
+  assertFalse(cookies.some((cookie) => cookie.startsWith('undefined=')))
+  assertEquals(cookies.length, 3) // status + subject + cookies-accepted only, no token cookie
+})
+
 Deno.test('getSessionHeaders caps Max-Age at 0 if expiration is in the past', () => {
   const past = Math.floor(Date.now() / 1000) - 100
   const { 'Set-Cookie': cookies } = getSessionHeaders({

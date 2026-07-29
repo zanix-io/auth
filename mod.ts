@@ -20,7 +20,7 @@
  * the `./core` subpath instead (see the package README).
  */
 
-import { SESSION_HEADERS } from 'utils/constants.ts'
+import { SESSION_HEADERS } from '@zanix/server'
 
 // Connectors & Providers
 export { GoogleOAuth2Connector } from 'modules/connectors/google/mod.ts'
@@ -54,6 +54,11 @@ export {
   createRefreshToken,
   generateSessionTokens,
 } from 'utils/sessions/create.ts'
+export {
+  createServiceAssertion,
+  exchangeServiceCredential,
+  type ServiceCredential,
+} from 'utils/sessions/service-exchange.ts'
 export {
   getClientSubject,
   getDefaultSessionHeaders,
@@ -100,8 +105,11 @@ export { sessionHeadersInterceptor } from 'modules/middlewares/headers.intercept
 export { rateLimitGuard } from 'modules/middlewares/rate-limit.guard.ts'
 export { jwtValidationGuard } from 'modules/middlewares/jwt-validation.guard.ts'
 export { permissionsPipe } from 'modules/middlewares/permissions.pipe.ts'
+export { ipAllowlistGuard } from 'modules/middlewares/ip-allowlist.guard.ts'
+export type { IpAllowlistOptions } from 'modules/middlewares/ip-allowlist.guard.ts'
 
 // Decorators
 export { AuthTokenValidation } from 'modules/middlewares/decorators/authentication.ts'
 export { RequirePermissions } from 'modules/middlewares/decorators/permissions.ts'
 export { RateLimitGuard } from 'modules/middlewares/decorators/rate-limit.ts'
+export { IpAllowlistGuard } from 'modules/middlewares/decorators/ip-allowlist.ts'
