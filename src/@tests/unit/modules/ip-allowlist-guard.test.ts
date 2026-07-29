@@ -3,6 +3,8 @@ import { assertEquals, assertThrows } from '@std/assert'
 import { InternalError } from '@zanix/errors'
 import { ipAllowlistGuard } from 'modules/middlewares/ip-allowlist.guard.ts'
 
+console.error = () => {}
+
 function createCtx(headers: Record<string, string> = {}) {
   return {
     id: 'req-1',
