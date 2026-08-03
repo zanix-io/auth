@@ -7,6 +7,59 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-01
+
+### Added
+
+- `createServiceAuthClient(options)` — a generic, reusable building block on top of
+  `createServiceAssertion`/`exchangeServiceCredential` for ANY app (not just `@zanix/admin`) that
+  needs to call another Zanix service authenticated as itself. Given
+  `{serviceId, privateKey, keyId?,
+  assertionExpiration?}`, it returns a
+  `(targetServiceId, exchangeUrl) => Promise<ServiceAuthHeaders>` function that signs an assertion,
+  exchanges it at `exchangeUrl`, and returns `{ 'X-Znx-Authorization': 'Bearer <token>' }` — caching
+  the result per `targetServiceId` and re-exchanging automatically a few seconds before the cached
+  token's `expiresIn` elapses. Knows nothing about `ServiceRegistry` or any other admin-specific
+  concept — see `@zanix/admin`'s `createServiceRegistryAuthHeaders` for the thin adapter that wires
+  this into a `ServiceRegistryEntry`.
+- **`createServiceAssertion`'s `privateKey` is now optional** — omit it to resolve
+  `JWK_PRI_<serviceId>`/`JWK_PRI_<serviceId>_<keyId>` automatically, the exact mirror image of how
+  the verifying side (`exchangeServiceCredential`) already resolves
+  `JWK_PUB_<serviceId>`/`JWK_PUB_<serviceId>_<keyId>`. New exported
+  `resolveServiceAssertionPrivateKey(serviceId, keyId)` does the resolution (throwing
+  `InternalError` naming the exact missing env var if nothing's registered) — exported so a consumer
+  that wants to validate its own config upfront, before any real signing attempt, can check
+  resolvability without reimplementing this naming rule itself (see `@zanix/notifications`'s
+  `assertTemplatesConfigNotConflicting()` for a real example). `createServiceAuthClient`'s own
+  `ServiceAuthClientOptions.privateKey` is optional for the same reason — every consumer of either
+  function gets env-var resolution for free instead of each inventing its own env var name on top of
+  it, which is exactly what motivated this change: a `TEMPLATES_SERVICE_PRIVATE_KEY`-shaped env var
+  was about to be reinvented per consuming package.
+- **`createServiceAssertion`'s `keyId` is now also resolved automatically** — omit it to resolve
+  `JWK_ID_<serviceId>`, falling back to `serviceId` itself (today's single-key default) when that's
+  unset too. New exported `resolveServiceAssertionKeyId(serviceId)` does the resolution. Same
+  motivation as the `privateKey` change above, extended to "which key": rotating a service's keypair
+  is now a pure config change — flip `JWK_ID_<serviceId>` once
+  `JWK_PRI_<serviceId>_<newId>`/`JWK_PUB_<serviceId>_<newId>` are both registered — with no
+  `TEMPLATES_SERVICE_AUTH_KEY_ID`-shaped env var needed per consuming package either. An explicit
+  `keyId` argument still always wins when passed.
+
+### Changed (breaking)
+
+- **`createServiceAssertion`'s `privateKey` option must now be base64-encoded**, matching the
+  convention `JWK_PRI`/`JWK_PUB_<serviceId>` already use everywhere else in this package —
+  previously it expected the raw PEM string directly, the only inconsistent case of this kind in the
+  whole package. `createServiceAssertion` now `atob()`-decodes it internally before signing; passing
+  a raw (non-base64) PEM now rejects instead of silently mis-signing. Also changed from a plain
+  function to `async`, so this decode failure (or any other malformed-key error) always surfaces as
+  a rejected Promise, consistent with its declared `Promise<string>` return type, rather than
+  sometimes throwing synchronously.
+- **`privateKey` must be PKCS#8** (`-----BEGIN PRIVATE KEY-----`) — unchanged behavior, but now
+  documented: the underlying `crypto.subtle.importKey` call always imports with `format: 'pkcs8'`,
+  so a PKCS#1 key (`-----BEGIN RSA PRIVATE KEY-----`, e.g. from `openssl genrsa`) fails to import.
+  `generateRSAKeys()` (from `@zanix/helpers`) already produces PKCS#8; convert an existing PKCS#1
+  key with `openssl pkcs8 -topk8 -nocrypt -in old.pem -out new.pem`.
+
 ## [0.5.0] - 2026-07-28
 
 ### Added

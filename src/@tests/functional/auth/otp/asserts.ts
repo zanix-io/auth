@@ -8,7 +8,7 @@ console.warn = () => {}
 console.info = () => {}
 
 export const shouldGenerateAndExpire = async (provider: 'local' | 'redis') => {
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
+  await import('@zanix/datamaster/core') // load cache core
   const cache = ProgramModule.providers.get<ZanixCacheProvider>('cache')
 
   const target = 'pepito@email.com'
@@ -24,7 +24,7 @@ export const shouldGenerateAndExpire = async (provider: 'local' | 'redis') => {
 }
 
 export const shouldGenerateAndVerify = async (provider: 'local' | 'redis') => {
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
+  await import('@zanix/datamaster/core') // load cache core
   const cache = ProgramModule.providers.get<ZanixCacheProvider>('cache')
 
   const target = 'pepito@email.com'
@@ -42,7 +42,7 @@ export const shouldGenerateAndVerify = async (provider: 'local' | 'redis') => {
 }
 
 export const shouldAllowDifferentLens = async (provider: 'local' | 'redis') => {
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
+  await import('@zanix/datamaster/core') // load cache core
   const cache = ProgramModule.providers.get<ZanixCacheProvider>('cache')
 
   const target = 'pepito@email.com'

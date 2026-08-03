@@ -24,7 +24,7 @@ import { SESSION_HEADERS } from '@zanix/server'
 
 // Connectors & Providers
 export { GoogleOAuth2Connector } from 'modules/connectors/google/mod.ts'
-export { ZanixAuthProvider } from 'modules/providers/auth.ts'
+export { ZanixAuthProvider, ZanixCoreAuthProvider } from 'modules/providers/auth.ts'
 export { OAuth2Connector } from 'modules/connectors/oauth2.ts'
 export type { OAuth2ConnectorConfig, OAuth2ConnectorOptions } from 'modules/connectors/oauth2.ts'
 export type { AuthConnectors, CoreAuthConnectors, GoogleUserInfo } from 'typings/connectors.ts'
@@ -57,8 +57,15 @@ export {
 export {
   createServiceAssertion,
   exchangeServiceCredential,
+  resolveServiceAssertionKeyId,
+  resolveServiceAssertionPrivateKey,
   type ServiceCredential,
 } from 'utils/sessions/service-exchange.ts'
+export {
+  createServiceAuthClient,
+  type ServiceAuthClientOptions,
+  type ServiceAuthHeaders,
+} from 'utils/sessions/service-auth-client.ts'
 export {
   getClientSubject,
   getDefaultSessionHeaders,

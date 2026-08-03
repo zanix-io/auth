@@ -30,11 +30,42 @@ already accepts everywhere else.
 ```ts
 import { createServiceAssertion } from 'jsr:@zanix/auth'
 
-const assertion = await createServiceAssertion({
-  serviceId: 'zanix-admin',
-  privateKey: Deno.env.get('SERVICE_PRIVATE_KEY')!,
-})
+// `privateKey` omitted — resolves JWK_PRI_zanix-admin automatically (see below).
+const assertion = await createServiceAssertion({ serviceId: 'zanix-admin' })
 ```
+
+> ℹ️ **There is no separate private-key parameter to pass by default.** Omitting `privateKey`
+> resolves `JWK_PRI_<serviceId>` (or `JWK_PRI_<serviceId>_<keyId>` once `keyId` picks a specific key
+> — see [Rotating a Service's Key](#-rotating-a-services-key)) automatically, the exact mirror image
+> of how the _receiving_ side already resolves `JWK_PUB_<serviceId>`/ `JWK_PUB_<serviceId>_<keyId>`
+> (see [Registering a Trusted Service](#-registering-a-trusted-service) below) — one naming
+> convention for both directions. `resolveServiceAssertionPrivateKey(serviceId,
+> keyId)` is
+> exported directly if you want to check resolvability yourself (e.g. to fail fast at boot, before
+> any real signing attempt — see `@zanix/notifications`'s `assertTemplatesConfigNotConflicting()`
+> for a real example of this). Pass `privateKey` explicitly only when you're reading it from
+> somewhere other than an env var (a secrets manager, a config file):
+>
+> ```ts
+> const assertion = await createServiceAssertion({
+>   serviceId: 'zanix-admin',
+>   privateKey: await mySecretsManager.get('zanix-admin-signing-key'), // base64-encoded PEM
+> })
+> ```
+>
+> Either way, the value is **base64-encoded**, the same convention `JWK_PRI`/`JWK_PUB_<serviceId>`
+> already use everywhere else in this package — `createServiceAssertion` decodes it internally
+> before signing. Generate a keypair with `generateRSAKeys()` (from `@zanix/helpers`) and store
+> `btoa(privateKey)` (not the raw multi-line PEM) — a raw PEM contains characters (`-`, newlines)
+> that aren't valid base64 and fails to decode.
+>
+> **Only PKCS#8 private keys are supported** (`-----BEGIN PRIVATE KEY-----`) — the underlying
+> `crypto.subtle.importKey` call always imports with `format: 'pkcs8'`. A PKCS#1 key
+> (`-----BEGIN RSA PRIVATE KEY-----`, e.g. from `openssl genrsa`) fails to import.
+> `generateRSAKeys()` already produces PKCS#8; convert an existing PKCS#1 key with
+> `openssl pkcs8 -topk8 -nocrypt -in old.pem -out new.pem`. The matching public key
+> (`JWK_PUB_<serviceId>`) must be SPKI (`-----BEGIN PUBLIC KEY-----`), which is what
+> `generateRSAKeys()`/`openssl rsa -pubout` produce by default.
 
 **Receiving service** — verifies the assertion and mints a real access token:
 
@@ -77,15 +108,16 @@ JWK_PUB_zanix-admin_key1=<base64-encoded PEM public key — current>
 JWK_PUB_zanix-admin_key2=<base64-encoded PEM public key — incoming>
 ```
 
-Pass the matching `keyId` when signing on the calling side — read both `privateKey` and `keyId` from
-config rather than hard-coding them, so that rotating later (see below) is a config change plus a
-restart/redeploy, never a code change:
+Pass the matching `keyId` when signing on the calling side. With `privateKey` omitted (the default —
+see [Basic Usage](#-basic-usage)), `keyId` alone is enough: it also selects
+`JWK_PRI_zanix-admin_key1`/ `JWK_PRI_zanix-admin_key2` on the signing side automatically, so
+rotating later (see below) is a config change (which `JWK_PRI_...`/`JWK_PUB_...` pair is registered,
+and which `keyId` you pass) plus a restart/redeploy, never a code change:
 
 ```ts
 const assertion = await createServiceAssertion({
   serviceId: 'zanix-admin',
-  privateKey: Deno.env.get('SERVICE_PRIVATE_KEY')!,
-  keyId: Deno.env.get('SERVICE_KEY_ID')!,
+  keyId: Deno.env.get('SERVICE_KEY_ID')!, // e.g. 'key1' or 'key2'
 })
 ```
 
@@ -142,27 +174,32 @@ re-implementing this handler if your app is already `@zanix/core`-based.
 Unlike the single, unkeyed `JWK_PUB_<serviceId>` form, the `_<keyId>`-suffixed form supports a real
 overlap window — both the old and new keys are registered and verify successfully at the same time,
 so there's no deploy-ordering requirement and no window where an in-flight assertion gets rejected.
-The example below assumes the calling service reads its own `privateKey`/`keyId` from config, as
-shown in [Registering a Trusted Service](#-registering-a-trusted-service) — under that setup,
-switching keys is a config change, not a code change.
+The example below assumes the calling service reads `keyId` from its own config and leaves
+`privateKey` omitted (so `JWK_PRI_<serviceId>_<keyId>` resolves automatically — the default, see
+[Basic Usage](#-basic-usage)); under that setup, switching keys is a config change, not a code
+change.
 
-1. **Publish the new public key on the receiving side** — register `JWK_PUB_<serviceId>_key2`
-   alongside the still-active `JWK_PUB_<serviceId>_key1`. The receiver now accepts both; nothing on
-   the calling service needs to change yet:
+1. **Register the new key pair alongside the still-active one** — on the receiving side,
+   `JWK_PUB_<serviceId>_key2` next to `JWK_PUB_<serviceId>_key1`; on the calling service's own side,
+   `JWK_PRI_<serviceId>_key2` next to `JWK_PRI_<serviceId>_key1`. Both accept/can sign with either
+   at this point; nothing on the calling service needs to switch yet:
 
    ```env
+   # Receiving side
    JWK_PUB_zanix-admin_key1=<old public key>
    JWK_PUB_zanix-admin_key2=<new public key>
+
+   # Calling side
+   JWK_PRI_zanix-admin_key1=<old private key, base64-encoded PEM>
+   JWK_PRI_zanix-admin_key2=<new private key, base64-encoded PEM>
    ```
 
-2. **Switch the calling service's own config, then restart/redeploy it** — no code change:
+2. **Switch the calling service's own `keyId` config, then restart/redeploy it** — no code change:
 
    ```diff
      # Before
-   - SERVICE_PRIVATE_KEY=<old private key>
    - SERVICE_KEY_ID=key1
      # After
-   + SERVICE_PRIVATE_KEY=<new private key>
    + SERVICE_KEY_ID=key2
    ```
 
@@ -213,18 +250,34 @@ their own lifetime regardless of what happens to the calling service's keypair a
 ```ts
 createServiceAssertion(options: {
   serviceId: string
-  privateKey: string
+  privateKey?: string
   keyId?: string
   expiration?: number | string
 }): Promise<string>
 ```
 
-| Option       | Description                                                                                                                                                                                                                                                 |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `serviceId`  | This service's own registered identity — the assertion's `iss`/`sub`.                                                                                                                                                                                       |
-| `privateKey` | This service's own RSA private key (PEM), matching whichever public key `keyId` resolves to. Never `@zanix/auth`'s own `JWK_PRI`.                                                                                                                           |
-| `keyId`      | Which registered key signed this assertion (the JWT header `kid`). Defaults to `serviceId` — the bare `JWK_PUB_<serviceId>` form. Pass explicitly to use `JWK_PUB_<serviceId>_<keyId>` instead (see [Rotating a Service's Key](#-rotating-a-services-key)). |
-| `expiration` | How long the assertion itself stays valid. Defaults to `2m`.                                                                                                                                                                                                |
+| Option       | Description                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serviceId`  | This service's own registered identity — the assertion's `iss`/`sub`.                                                                                                                                                                                                                                                                                                                 |
+| `privateKey` | **Optional.** This service's own RSA private key, **base64-encoded**, **PKCS#8 only** (same convention as `JWK_PRI`/`JWK_PUB_<serviceId>`), matching whichever public key `keyId` resolves to. Never `@zanix/auth`'s own `JWK_PRI`. Omitted, resolves `JWK_PRI_<serviceId>`/`JWK_PRI_<serviceId>_<keyId>` automatically — see the note above and `resolveServiceAssertionPrivateKey`. |
+| `keyId`      | Which registered key signed this assertion (the JWT header `kid`). Defaults to `serviceId` — the bare `JWK_PUB_<serviceId>`/`JWK_PRI_<serviceId>` form. Pass explicitly to use the `_<keyId>`-suffixed form instead (see [Rotating a Service's Key](#-rotating-a-services-key)).                                                                                                      |
+| `expiration` | How long the assertion itself stays valid. Defaults to `2m`.                                                                                                                                                                                                                                                                                                                          |
+
+---
+
+### `resolveServiceAssertionPrivateKey(serviceId, keyId)`
+
+```ts
+resolveServiceAssertionPrivateKey(serviceId: string, keyId: string): string
+```
+
+Resolves `JWK_PRI_<serviceId>` (`keyId === serviceId`) or `JWK_PRI_<serviceId>_<keyId>` otherwise —
+the exact mirror image of how the _receiving_ side resolves `JWK_PUB_<serviceId>`/
+`JWK_PUB_<serviceId>_<keyId>`. Used internally by `createServiceAssertion` whenever `privateKey` is
+omitted; exported so a consumer that wants to validate its own config upfront (before any real
+signing attempt) can check resolvability without reimplementing this naming rule itself.
+
+@throws `InternalError` if nothing is registered under the resolved env var name.
 
 Returns the signed assertion (a JWT string) to send to `exchangeServiceCredential`.
 

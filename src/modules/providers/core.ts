@@ -7,14 +7,26 @@
  * \_____/ \__,_||_| |_||_|/_/\_\
  */
 
-import { Provider } from '@zanix/server'
+import { Provider, registerCoreProviderSlot } from '@zanix/server'
 
-import { ZanixAuthProvider } from './auth.ts'
+import { ZanixAuthProvider, ZanixCoreAuthProvider } from './auth.ts'
 
-/** Provider DSL definition */
+// `@zanix/auth` owns the `'auth'` core-provider slot: it registers it here, in its own `/core`
+// entrypoint, rather than relying on `@zanix/server` to declare it upfront.
+registerCoreProviderSlot('auth', ZanixCoreAuthProvider, { sourcePackage: '@zanix/auth/core' })
+
+/**
+ * Provider DSL definition — applies the decorator directly to `ZanixAuthProvider` itself (calling
+ * it as a plain function, not `@Provider(...)` syntax, since there's no wrapper class declaration
+ * to attach `@` to) rather than wrapping it in a throwaway anonymous subclass. This matters beyond
+ * style: `this.providers.get(ZanixAuthProvider)` only resolves the exact class that was decorated
+ * — an anonymous `class _X extends ZanixAuthProvider {}` wrapper would still work via
+ * `get('auth')`, but `get(ZanixAuthProvider)` (the class every consumer actually imports) would
+ * silently fail to find it, since `getTargetKey` assigns each class reference — the wrapper and
+ * `ZanixAuthProvider` — its own distinct identity.
+ */
 const registerProvider = () => {
-  @Provider({ type: 'auth', lifetime: 'SCOPED' })
-  class _ZanixAuthProvider extends ZanixAuthProvider {}
+  Provider({ slot: 'auth', lifetime: 'SCOPED' })(ZanixAuthProvider)
 }
 
 /**

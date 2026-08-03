@@ -22,7 +22,7 @@ const initialize = async () => {
   Deno.env.set('REDIS_URI', 'redis://localhost:6379')
   Deno.env.set('JWT_KEY', 'my-secret')
 
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
+  await import('@zanix/datamaster/core') // load cache core
 
   // deno-lint-ignore no-explicit-any
   await ProgramModule.connectors.get<any>('cache:redis').clear() // reset data

@@ -1,4 +1,4 @@
-import { HttpError, PermissionDenied } from '@zanix/errors'
+import { HttpError, InternalError, PermissionDenied } from '@zanix/errors'
 import { parseTTL } from '@zanix/helpers'
 import {
   SERVICE_ASSERTION_DEFAULT_EXP,
@@ -30,23 +30,44 @@ import { createAppToken } from './create.ts'
  * {@link exchangeServiceCredential}'s "Key rotation" section for the full overlap-window flow).
  *
  * @param options.serviceId - This service's own registered identity (`iss`/`sub`).
- * @param options.privateKey - This service's own RSA private key (PEM), matching whichever public
- * key `keyId` (or, if omitted, `serviceId` itself) resolves to on the verifying side. Never
- * `@zanix/auth`'s own `JWK_PRI`.
+ * @param options.privateKey - This service's own RSA private key, **base64-encoded** (the same
+ * convention `JWK_PRI`/`JWK_PUB_<serviceId>` already use elsewhere in this package — see
+ * {@link resolveServiceAssertionKey}/`sessions/create.ts`), decoded internally before signing.
+ * **Must be PKCS#8** (`-----BEGIN PRIVATE KEY-----`) — the underlying `crypto.subtle.importKey`
+ * call always imports with `format: 'pkcs8'`, so a PKCS#1 key (`-----BEGIN RSA PRIVATE KEY-----`,
+ * e.g. from `openssl genrsa`) fails to decode/import. `generateRSAKeys()` (from `@zanix/helpers`)
+ * already produces PKCS#8; convert an existing PKCS#1 key with
+ * `openssl pkcs8 -topk8 -nocrypt -in old.pem -out new.pem`. Matches whichever public key `keyId`
+ * (or, if omitted, `serviceId` itself) resolves to on the verifying side, base64-encoded the same
+ * way — that side expects SPKI (`-----BEGIN PUBLIC KEY-----`), which is what
+ * `generateRSAKeys()`/`openssl rsa -pubout` produce by default. Never `@zanix/auth`'s own `JWK_PRI`.
+ * **Optional** — omit it to resolve `JWK_PRI_<serviceId>`/`JWK_PRI_<serviceId>_<keyId>`
+ * automatically (see {@link resolveServiceAssertionPrivateKey}), the exact mirror image of how the
+ * verifying side already resolves `JWK_PUB_<serviceId>`/`JWK_PUB_<serviceId>_<keyId>` — one naming
+ * convention for both directions, so every consumer of this function (`createServiceAuthClient`,
+ * `ZanixAdminHub.start({ auth })`, `@zanix/notifications`'s `RemoteTemplateBackend`, ...) gets env
+ * var resolution for free instead of each reimplementing this same lookup rule itself.
  * @param options.keyId - Identifies which of this service's registered keys signed this assertion
- * — the JWT header `kid`. Defaults to `serviceId` (today's behavior: a single, unkeyed
- * `JWK_PUB_<serviceId>`). Pass a distinct value (e.g. `'key2'`) during key rotation, matching
- * whatever `JWK_PUB_<serviceId>_<keyId>` the receiving side has registered for it.
+ * — the JWT header `kid`. **Optional** — omit it to resolve `JWK_ID_<serviceId>` automatically (see
+ * {@link resolveServiceAssertionKeyId}), falling back to `serviceId` itself (today's single-key
+ * behavior: the bare `JWK_PUB_<serviceId>`/`JWK_PRI_<serviceId>` form) when that's unset too. Set
+ * `JWK_ID_<serviceId>` (or pass `keyId` explicitly) once you're rotating that service's keypair and
+ * need to select a specific `JWK_PUB_<serviceId>_<keyId>`/`JWK_PRI_<serviceId>_<keyId>` pair — same
+ * reasoning as `privateKey` above: one naming convention every consumer gets for free, instead of
+ * each inventing its own "which key" env var (e.g. a `TEMPLATES_SERVICE_AUTH_KEY_ID`).
  * @param options.expiration - How long the assertion itself stays valid — short by design, since
  * it's presented once and immediately exchanged. Defaults to {@link SERVICE_ASSERTION_DEFAULT_EXP}.
  *
  * @returns The signed assertion (a JWT string) to send to {@link exchangeServiceCredential}.
  *
+ * @throws {InternalError} If `privateKey` is omitted and nothing is registered under the resolved
+ * `JWK_PRI_<serviceId>`/`JWK_PRI_<serviceId>_<keyId>` env var.
+ *
  * @example
  * ```ts
  * const assertion = await createServiceAssertion({
  *   serviceId: 'zanix-admin',
- *   privateKey: Deno.env.get('SERVICE_PRIVATE_KEY')!,
+ *   privateKey: Deno.env.get('SERVICE_PRIVATE_KEY')!, // base64-encoded PEM
  * })
  * ```
  *
@@ -55,24 +76,73 @@ import { createAppToken } from './create.ts'
  * ```ts
  * const assertion = await createServiceAssertion({
  *   serviceId: 'zanix-admin',
- *   privateKey: Deno.env.get('SERVICE_PRIVATE_KEY_V2')!,
+ *   privateKey: Deno.env.get('SERVICE_PRIVATE_KEY_V2')!, // base64-encoded PEM
  *   keyId: 'key2',
  * })
  * ```
+ *
+ * @example
+ * Letting `JWK_PRI_zanix-admin`/`JWK_ID_zanix-admin` resolve automatically instead of reading them
+ * yourself — rotating later is then a pure config change, `keyId` included:
+ * ```ts
+ * const assertion = await createServiceAssertion({ serviceId: 'zanix-admin' })
+ * ```
  */
-export const createServiceAssertion = (options: {
+export const createServiceAssertion = async (options: {
   serviceId: string
-  privateKey: string
+  privateKey?: string
   keyId?: string
   expiration?: number | string
 }): Promise<string> => {
-  const { serviceId, privateKey, keyId = serviceId, expiration = SERVICE_ASSERTION_DEFAULT_EXP } =
-    options
+  const { serviceId, expiration = SERVICE_ASSERTION_DEFAULT_EXP } = options
+  const keyId = options.keyId ?? resolveServiceAssertionKeyId(serviceId)
+  const privateKey = options.privateKey ?? resolveServiceAssertionPrivateKey(serviceId, keyId)
 
-  return createJWT(
+  // `async` (rather than a plain function returning `createJWT`'s own promise) so a malformed
+  // `privateKey` — `atob()` throws synchronously on a raw, un-base64'd PEM — surfaces as a rejected
+  // Promise, consistent with this function's declared `Promise<string>` return type, not a
+  // synchronous throw a caller chaining `.catch()` wouldn't expect.
+  return await createJWT(
     { iss: serviceId, sub: serviceId, aud: SERVICE_EXCHANGE_AUDIENCE },
-    privateKey,
+    atob(privateKey),
     { algorithm: 'RS256', keyID: keyId, expiration },
+  )
+}
+
+/**
+ * Resolves which of this service's registered keys to sign/verify with — `JWK_ID_<serviceId>` if
+ * set, else `serviceId` itself (today's single-key convention: the bare `JWK_PUB_<serviceId>`/
+ * `JWK_PRI_<serviceId>` form). Used automatically by {@link createServiceAssertion} whenever
+ * `keyId` is omitted, so rotating a service's key is a pure config change — flip
+ * `JWK_ID_<serviceId>` to the new value once `JWK_PRI_<serviceId>_<newId>`/
+ * `JWK_PUB_<serviceId>_<newId>` are both registered — never a code change requiring a `keyId` to be
+ * threaded through by hand.
+ */
+export function resolveServiceAssertionKeyId(serviceId: string): string {
+  return Deno.env.get(`JWK_ID_${serviceId}`) || serviceId
+}
+
+/**
+ * Resolves this service's own registered private key for signing an assertion as `serviceId`/
+ * `keyId` — `JWK_PRI_<serviceId>` (bare) or `JWK_PRI_<serviceId>_<keyId>`, the exact mirror image
+ * of {@link resolveServiceAssertionKey}'s own segmenting rule on the verifying side. Used
+ * automatically by {@link createServiceAssertion} whenever `privateKey` is omitted; exported so a
+ * consumer that wants to validate its own config upfront (e.g. at boot, before any real signing
+ * attempt) can check resolvability without reimplementing this naming rule itself — see
+ * `@zanix/notifications`'s `assertTemplatesConfigNotConflicting()` for an example.
+ *
+ * @throws {InternalError} If nothing is registered under the resolved env var name.
+ */
+export function resolveServiceAssertionPrivateKey(serviceId: string, keyId: string): string {
+  const keyName = keyId === serviceId ? `JWK_PRI_${serviceId}` : `JWK_PRI_${serviceId}_${keyId}`
+  const secret = Deno.env.get(keyName)
+
+  if (secret) return secret
+
+  throw new InternalError(
+    `Missing private key to sign a service assertion for "${serviceId}" — register ` +
+      `"${keyName}", or pass "privateKey" explicitly to createServiceAssertion().`,
+    { meta: { source: 'zanix', method: 'createServiceAssertion', serviceId, keyId } },
   )
 }
 

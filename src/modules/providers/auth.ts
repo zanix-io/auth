@@ -1,7 +1,8 @@
 import type { AuthConnectors, CoreAuthConnectors, GoogleUserInfo } from 'typings/connectors.ts'
 import type { OAuthFlow, OtpFlow, SessionFlow, TotpFlow } from 'typings/auth.ts'
+import type { CoreModules } from '@zanix/server'
 
-import { ZanixCoreAuthProvider } from '@zanix/server'
+import { ZanixProvider } from '@zanix/server'
 import { authConnectors } from '../connectors/mod.ts'
 import { session } from './extensions/session.ts'
 import { otp } from './extensions/otp.ts'
@@ -9,12 +10,25 @@ import { totp } from './extensions/totp.ts'
 import { google } from './extensions/google.ts'
 
 /**
+ * Abstract base for the `'auth'` core-provider slot (see `providers/core.ts`) — owned by
+ * `@zanix/auth`, not `@zanix/server`. Unlike the 6 slots with a dedicated `CoreBaseClass` getter
+ * (`cache`, `database`, `asyncmq`, `worker`, `kvLocal`, `search`), auth has no such getter, so
+ * nothing in `@zanix/server`'s own source needs to import this type — it's a purely empty marker
+ * class whose only job is to give `@Provider({ type: 'auth' })`'s `instanceof` check
+ * (`defineProviderDecorator`) something to validate concrete implementations against.
+ *
+ * @abstract
+ * @extends ZanixProvider
+ */
+export abstract class ZanixCoreAuthProvider<T extends CoreModules = object>
+  extends ZanixProvider<T> {}
+
+/**
  * ZanixAuthProvider is the default authentication provider implementation for the Zanix framework.
  *
- * This class extends `@zanix/server`'s `ZanixCoreAuthProvider` (which is what makes it eligible
- * for the `'auth'` core-provider key — see `providers/core.ts`) to provide authentication
- * connectors for various providers such as Google OAuth2, One-Time Password (OTP), and TOTP
- * authenticator-app 2FA.
+ * This class extends `ZanixCoreAuthProvider` (above), which is what makes it eligible for the
+ * `'auth'` core-provider key — see `providers/core.ts` — to provide authentication connectors for
+ * various providers such as Google OAuth2, One-Time Password (OTP), and TOTP authenticator-app 2FA.
  *
  * It allows selecting a connector dynamically with `use()` or accessing
  * predefined connectors via properties (`google`, `otp`, `totp`).

@@ -31,7 +31,7 @@ Apply the decorator to a controller:
 ```ts
 import { AuthTokenValidation, IpAllowlistGuard } from 'jsr:@zanix/auth'
 
-@Controller({ isInternal: true })
+@Controller()
 @AuthTokenValidation({ permissions: ['admin'] })
 @IpAllowlistGuard({
   allow: [
@@ -196,7 +196,7 @@ For administrative or internal endpoints, combine authentication, authorization,
 allowlisting:
 
 ```ts
-@Controller({ isInternal: true })
+@Controller()
 @AuthTokenValidation({ permissions: ['admin'] })
 @IpAllowlistGuard({
   allow: ['10.0.0.0/8'],

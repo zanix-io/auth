@@ -9,7 +9,7 @@ console.warn = () => {}
 console.info = () => {}
 
 export const asserts = async () => {
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
+  await import('@zanix/datamaster/core') // load cache core
   const localDb = ProgramModule.connectors.get<ZanixKVConnector>('kvLocal')
   const cache = ProgramModule.providers.get<ZanixCacheProvider>('cache')
 

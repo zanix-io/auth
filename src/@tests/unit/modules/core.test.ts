@@ -1,7 +1,8 @@
 // deno-lint-ignore-file no-explicit-any
-import { assert, assertThrows } from '@std/assert'
+import { assert, assertStrictEquals, assertThrows } from '@std/assert'
 import { ProgramModule } from '@zanix/server'
 import { GoogleOAuth2Connector } from 'modules/connectors/google/mod.ts'
+import { ZanixAuthProvider } from 'modules/providers/auth.ts'
 
 const googleConnectorRef = GoogleOAuth2Connector as any
 
@@ -12,6 +13,19 @@ Deno.test('providers/core.ts registers the default auth provider under "auth"', 
 
   const provider = ProgramModule.providers.get('auth')
   assert(provider)
+})
+
+Deno.test({
+  name: 'providers/core.ts: the default auth provider also resolves by class (ZanixAuthProvider)',
+  fn: async () => {
+    await import('modules/providers/core.ts')
+
+    const viaName = ProgramModule.providers.get('auth')
+    const viaClass = ProgramModule.providers.get(ZanixAuthProvider)
+
+    assert(viaClass instanceof ZanixAuthProvider)
+    assertStrictEquals(viaName, viaClass)
+  },
 })
 
 Deno.test('middlewares/core.ts registers the session headers interceptor', async () => {

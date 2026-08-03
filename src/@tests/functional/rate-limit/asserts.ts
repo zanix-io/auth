@@ -5,13 +5,12 @@ import { assert, assertAlmostEquals, assertEquals, assertFalse } from '@std/asse
 import { sessionHeadersInterceptor } from 'modules/middlewares/headers.interceptor.ts'
 import { rateLimitGuard } from 'modules/middlewares/rate-limit.guard.ts'
 import { contextMock } from '../../mocks.ts'
-import { ProgramModule, RATE_LIMIT_HEADERS } from '@zanix/server'
+import { ProgramModule, RATE_LIMIT_HEADERS, type ZanixCacheConnector } from '@zanix/server'
 import { stub } from '@std/testing/mock'
 
 export const addValidHeaders = async (cache: 'cache:local' | 'cache:redis') => {
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
-  // deno-lint-ignore no-explicit-any
-  await ProgramModule.connectors.get<any>(cache).clear() // reset data
+  await import('@zanix/datamaster/core') // load cache core
+  await (ProgramModule.connectors.get<ZanixCacheConnector>(cache)).clear() // reset data
   const context = contextMock()
 
   const guard = rateLimitGuard({ app: 'test' })
@@ -23,7 +22,7 @@ export const addValidHeaders = async (cache: 'cache:local' | 'cache:redis') => {
 }
 
 export const addValidSessionHeaders = async () => {
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
+  await import('@zanix/datamaster/core') // load cache core
   const context = contextMock()
 
   const guard = rateLimitGuard({ app: 'test' })
@@ -39,7 +38,7 @@ export const addValidSessionHeaders = async () => {
 }
 
 export const shouldNotAddSessionHeaders = async () => {
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
+  await import('@zanix/datamaster/core') // load cache core
   const context = contextMock()
 
   const guard = rateLimitGuard({ app: 'test' })
@@ -53,9 +52,8 @@ export const shouldNotAddSessionHeaders = async () => {
 }
 
 export const shouldSupportConcurrency = async (cache: 'cache:local' | 'cache:redis') => {
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
-  // deno-lint-ignore no-explicit-any
-  await ProgramModule.connectors.get<any>(cache).clear() // reset data
+  await import('@zanix/datamaster/core') // load cache core
+  await (ProgramModule.connectors.get<ZanixCacheConnector>(cache)).clear() // reset data
   const context = contextMock()
 
   const guard = rateLimitGuard({ app: 'test' })
@@ -85,7 +83,7 @@ export const shouldSupportConcurrency = async (cache: 'cache:local' | 'cache:red
 }
 
 export const shouldFailDueLimitAnonymous = async (cache: 'cache:local' | 'cache:redis') => {
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
+  await import('@zanix/datamaster/core') // load cache core
   // deno-lint-ignore no-explicit-any
   await ProgramModule.connectors.get<any>(cache).clear() // reset data
   const context = contextMock()
@@ -111,7 +109,7 @@ export const shouldFailDueLimitAnonymous = async (cache: 'cache:local' | 'cache:
 }
 
 export const shouldFailDueLimit = async (cache: 'cache:local' | 'cache:redis') => {
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
+  await import('@zanix/datamaster/core') // load cache core
   // deno-lint-ignore no-explicit-any
   await ProgramModule.connectors.get<any>(cache).clear() // reset data
   const context = contextMock()
@@ -135,7 +133,7 @@ export const shouldFailDueLimit = async (cache: 'cache:local' | 'cache:redis') =
 }
 
 export const shouldLogError = async (cache: 'cache:local' | 'cache:redis') => {
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
+  await import('@zanix/datamaster/core') // load cache core
   // deno-lint-ignore no-explicit-any
   await ProgramModule.connectors.get<any>(cache).clear() // reset data
   const context = contextMock()
@@ -172,7 +170,7 @@ export const shouldLogError = async (cache: 'cache:local' | 'cache:redis') => {
 }
 
 export const shouldResetLimit = async (cache: 'cache:local' | 'cache:redis') => {
-  await import('jsr:@zanix/datamaster@0.5.*/core') // load cache core
+  await import('@zanix/datamaster/core') // load cache core
   // deno-lint-ignore no-explicit-any
   await ProgramModule.connectors.get<any>(cache).clear() // reset data
   const context = contextMock()

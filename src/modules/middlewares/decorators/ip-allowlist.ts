@@ -20,7 +20,7 @@ import { ipAllowlistGuard, type IpAllowlistOptions } from '../ip-allowlist.guard
  *
  * @example
  * ```ts
- * @Controller({ isInternal: true })
+ * @Controller()
  * @IpAllowlistGuard({ allow: ['10.0.0.0/8'], trustProxyHeader: true })
  * export class AdminController extends ZanixController {
  *   // ...
