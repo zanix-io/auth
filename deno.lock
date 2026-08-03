@@ -38,6 +38,7 @@
     "jsr:@zanix/datamaster@1": "1.1.0",
     "jsr:@zanix/server@3": "3.1.0",
     "jsr:@zanix/server@^3.1.0": "3.1.0",
+    "jsr:@zanix/utils@*": "2.4.5",
     "jsr:@zanix/utils@2": "2.4.5",
     "jsr:@zanix/utils@2.4": "2.4.5",
     "npm:@types/node@*": "24.2.0",
