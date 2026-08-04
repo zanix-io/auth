@@ -8,9 +8,10 @@ covers all four.
 ## 🧭 Table of Contents
 
 1. [Permissions & Scopes](#-permissions--scopes)
-2. [Adding a Custom OAuth2 Provider](#-adding-a-custom-oauth2-provider)
-3. [OTP (One-Time Password)](#-otp-one-time-password)
-4. [Two-Factor Authentication (TOTP)](#-two-factor-authentication-totp)
+2. [Reading the Current Request's Access Token](#-reading-the-current-requests-access-token)
+3. [Adding a Custom OAuth2 Provider](#-adding-a-custom-oauth2-provider)
+4. [OTP (One-Time Password)](#-otp-one-time-password)
+5. [Two-Factor Authentication (TOTP)](#-two-factor-authentication-totp)
 
 ---
 
@@ -32,6 +33,34 @@ of the flows below or in the README's Google OAuth2 example) are stored as the J
 - In both cases, access is granted if **at least one** required permission matches — not all of
   them. `permissions: ['admin', 'write:user']` means "admin OR write:user", not "both."
 - A session whose `aud`/scope includes `'*'` is granted access to any permission check.
+
+---
+
+## 🎟️ Reading the Current Request's Access Token
+
+Once `jwtValidationGuard`/`AuthTokenValidation` succeeds, `ctx.session.accessToken` holds **this
+request's own verified access token** — the exact value taken from its `Authorization`/
+`X-Znx-Authorization` header:
+
+```ts
+class ProxyInteractor extends ZanixInteractor {
+  @AuthTokenValidation()
+  async handle() {
+    // Forward the caller's own identity to a downstream service call made on their behalf.
+    const upstream = await fetch('https://internal-service/resource', {
+      headers: { Authorization: `Bearer ${this.context.session.accessToken}` },
+    })
+    return upstream.json()
+  }
+}
+```
+
+**`accessToken` is never the refresh token.** The session also carries a separate `token` field once
+a session is created/refreshed (`generateTokens()`, `refreshTokens()`, OTP/TOTP/OAuth2
+`authenticate()`) — that's the long-lived refresh token `sessionHeadersInterceptor` stores in the
+`X-Znx-App-Token` cookie, and it is never set by request validation alone. A request that only went
+through `jwtValidationGuard` (no login/refresh in the same request) has `accessToken` but no
+`token`.
 
 ---
 

@@ -7,6 +7,20 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-04
+
+### Fixed
+
+- `jwtValidationGuard` now assigns `accessToken` on the session it builds — this request's own
+  verified access token, taken from its `Authorization`/`X-Znx-Authorization` header. Previously the
+  guard never stored it anywhere on `ctx.session`, so a handler had no way to read/forward the
+  caller's own token (e.g. to authenticate a downstream call made on their behalf) without
+  re-parsing the header itself. Stored under `accessToken`, distinct from `token` (the refresh token
+  field `sessionHeadersInterceptor` reads to set the `X-Znx-App-Token` cookie) — reusing that name
+  would have made the interceptor overwrite the refresh-token cookie with the access token on every
+  authenticated request. See
+  [Authentication Methods: Reading the Current Request's Access Token](docs/authentication-methods.md#-reading-the-current-requests-access-token).
+
 ## [0.6.0] - 2026-08-01
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "@zanix/auth",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "nodeModulesDir": "auto",
   "zanix": {
     "project": "library",

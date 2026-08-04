@@ -69,6 +69,11 @@ Deno.test({
     const { response } = await jwtValidationGuard({ rateLimit: false })(context)
 
     assertFalse(response)
+    // The session carries this request's own verified access token — distinct from the refresh
+    // token, which this guard never sees at all (only `refreshTokens()`/`create.ts` do).
+    // deno-lint-ignore no-explicit-any
+    assertEquals((context.locals.session as any).accessToken, token)
+
     // Simulates `@zanix/server`'s `contextSettingPipe`, which always promotes `locals.session` to
     // the frozen `ctx.session` between the guard phase and any interceptor.
     context.session = context.locals.session as never

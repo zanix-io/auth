@@ -62,7 +62,10 @@ import {
  *
  * When validation **succeeds**, this guard only assigns `ctx.locals.session` — the
  * corresponding response headers/cookies are added afterwards by
- * {@link sessionHeadersInterceptor}, not by this guard.
+ * {@link sessionHeadersInterceptor}, not by this guard. The assigned session includes
+ * `accessToken` — this request's own verified access token (the value taken from its
+ * `Authorization`/`X-Znx-Authorization` header), not the refresh token issued at login. Useful for
+ * forwarding the caller's identity to a downstream call made on their behalf.
  *
  * ## Permissions / Audience Validation
  * If the `permissions` option is supplied, it is matched against the `aud` claim
@@ -254,13 +257,15 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
       const status: SessionStatus = 'active'
 
       // This value is processed in headers interceptor, to add valid session headers.
-      // `token` is intentionally NOT included here: it holds the access token from this
-      // request's Authorization header, not the refresh token issued at login. Forwarding
-      // it would make sessionHeadersInterceptor overwrite the refresh-token cookie with
-      // the access token on every authenticated request.
+      // Stored as `accessToken`, never as `token`: `token` is the field name
+      // `sessionHeadersInterceptor` reads to set the refresh-token cookie (see
+      // `utils/sessions/create.ts`'s `Object.assign(ctx.locals.session, { token: ... })`).
+      // Reusing that name for this request's access token would make the interceptor overwrite
+      // the refresh-token cookie with the access token on every authenticated request.
       ctx.locals.session = {
         // deno-lint-ignore no-non-null-assertion
         ...ctx.locals.session!,
+        accessToken: token,
         status,
       }
 
