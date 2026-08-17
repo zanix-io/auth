@@ -33,6 +33,7 @@
     "jsr:@std/testing@1.0.16": "1.0.16",
     "jsr:@zanix/datamaster@^1.3.0": "1.3.0",
     "jsr:@zanix/server@^3.2.0": "3.2.0",
+    "jsr:@zanix/utils@*": "2.6.0",
     "jsr:@zanix/utils@^2.6.0": "2.6.0",
     "npm:graphql@16": "16.14.2",
     "npm:mongoose@8": "8.24.3",
@@ -170,7 +171,7 @@
       "dependencies": [
         "jsr:@db/sqlite",
         "jsr:@zanix/server",
-        "jsr:@zanix/utils",
+        "jsr:@zanix/utils@^2.6.0",
         "npm:mongoose",
         "npm:redis"
       ]
@@ -181,7 +182,7 @@
         "jsr:@std/http",
         "jsr:@std/path@0.224",
         "jsr:@zanix/server",
-        "jsr:@zanix/utils",
+        "jsr:@zanix/utils@^2.6.0",
         "npm:graphql",
         "npm:redis"
       ]
