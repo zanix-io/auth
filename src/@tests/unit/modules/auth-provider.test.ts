@@ -19,7 +19,10 @@ Deno.test('ZanixAuthProvider.use() resolves the connector class from authConnect
     },
   }
 
-  const result = (ZanixAuthProvider.prototype as any).use.call(fakeThis, 'google-oauth2')
+  const result = (ZanixAuthProvider.prototype as any).use.call(
+    fakeThis,
+    'google-oauth2',
+  )
 
   assertEquals(result, 'connector-instance')
   assertEquals(calls, [[GoogleOAuth2Connector, false]])
@@ -32,9 +35,17 @@ Deno.test('google extension delegates its methods to use()', async () => {
     use: (connector: string) => {
       calls.push(connector)
       return {
-        generateAuthUrl: (opts: unknown) => ({ url: 'mock-url', state: 's', opts }),
+        generateAuthUrl: (opts: unknown) => ({
+          url: 'mock-url',
+          state: 's',
+          opts,
+        }),
         getUserInfo: (token: string) => ({ email: 'mock@x.com', token }),
-        authenticate: (ctx: unknown, token: string, sessionOptions: unknown) => ({
+        authenticate: (
+          ctx: unknown,
+          token: string,
+          sessionOptions: unknown,
+        ) => ({
           user: { email: 'mock@x.com' },
           session: { ctx, token, sessionOptions },
         }),
@@ -44,10 +55,16 @@ Deno.test('google extension delegates its methods to use()', async () => {
 
   const flow = google.call(fakeThis)
 
-  assertEquals((flow.generateAuthUrl({ state: 's' }) as any).opts, { state: 's' })
+  assertEquals((flow.generateAuthUrl({ state: 's' }) as any).opts, {
+    state: 's',
+  })
   assertEquals((await flow.validateToken('tok') as any).token, 'tok')
   const authResult = await flow.authenticate('tok', {}) as any
-  assertEquals(authResult.session, { ctx: fakeThis.context, token: 'tok', sessionOptions: {} })
+  assertEquals(authResult.session, {
+    ctx: fakeThis.context,
+    token: 'tok',
+    sessionOptions: {},
+  })
   assertEquals(calls, ['google-oauth2', 'google-oauth2', 'google-oauth2'])
 })
 
@@ -112,14 +129,18 @@ Deno.test('totp extension delegates generate/verify/authenticate to their utils'
   const secret = flow.generateSecret()
   assert(secret)
 
-  const uri = flow.getProvisioningUri(secret, 'user@example.com', { issuer: 'MyApp' })
+  const uri = flow.getProvisioningUri(secret, 'user@example.com', {
+    issuer: 'MyApp',
+  })
   assert(uri.startsWith('otpauth://totp/'))
 
   assertEquals(await flow.verify(secret, 'wrong-code'), false)
 
   const code = await generateTOTP(secret)
   assertEquals(await flow.verify(secret, code), true)
-  const tokens = await flow.authenticate(secret, code, { subject: 'user@example.com' })
+  const tokens = await flow.authenticate(secret, code, {
+    subject: 'user@example.com',
+  })
   assert(tokens.accessToken)
   assert(tokens.refreshToken)
 

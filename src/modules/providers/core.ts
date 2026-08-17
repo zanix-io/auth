@@ -13,7 +13,9 @@ import { ZanixAuthProvider, ZanixCoreAuthProvider } from './auth.ts'
 
 // `@zanix/auth` owns the `'auth'` core-provider slot: it registers it here, in its own `/core`
 // entrypoint, rather than relying on `@zanix/server` to declare it upfront.
-registerCoreProviderSlot('auth', ZanixCoreAuthProvider, { sourcePackage: '@zanix/auth/core' })
+registerCoreProviderSlot('auth', ZanixCoreAuthProvider, {
+  sourcePackage: '@zanix/auth/core',
+})
 
 /**
  * Provider DSL definition — applies the decorator directly to `ZanixAuthProvider` itself (calling

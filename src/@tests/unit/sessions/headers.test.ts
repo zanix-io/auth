@@ -39,7 +39,10 @@ Deno.test('getSessionHeaders includes cookies when requested', () => {
     cookies[0],
     /X-Znx-User-Session-Status=active; Max-Age=\d+; Path=\/; HttpOnly; SameSite=Strict/,
   )
-  assertMatch(cookies[1], /X-Znx-User-Id=alice; Max-Age=\d+; Path=\/; HttpOnly; SameSite=Strict/)
+  assertMatch(
+    cookies[1],
+    /X-Znx-User-Id=alice; Max-Age=\d+; Path=\/; HttpOnly; SameSite=Strict/,
+  )
 })
 
 Deno.test('getSessionHeaders derives the refresh cookie Max-Age from its own exp', async () => {
@@ -165,7 +168,9 @@ Deno.test(
   async () => {
     const { 'Set-Cookie': _, ...apiHeaders } = await getDefaultSessionHeaders(
       {
-        headers: { get: (name: string) => name === 'X-Znx-User-Id' ? 'my-user' : null } as never,
+        headers: {
+          get: (name: string) => name === 'X-Znx-User-Id' ? 'my-user' : null,
+        } as never,
         cookies: {},
         type: 'api',
         cookiesAccepted: false,
@@ -177,7 +182,9 @@ Deno.test(
 
     const { 'Set-Cookie': __, ...userHeaders } = await getDefaultSessionHeaders(
       {
-        headers: { get: (name: string) => name === 'X-Znx-Api-Id' ? 'my-user' : null } as never,
+        headers: {
+          get: (name: string) => name === 'X-Znx-Api-Id' ? 'my-user' : null,
+        } as never,
         cookies: {},
         type: 'user',
         cookiesAccepted: false,
@@ -192,7 +199,9 @@ Deno.test(
 Deno.test('getDefaultSessionHeaders returns default headers with cookies', async () => {
   const { 'Set-Cookie': cookies, ...apiHeaders } = await getDefaultSessionHeaders(
     {
-      headers: { get: (name: string) => name === 'X-Znx-Api-Id' ? 'my-api' : null } as never,
+      headers: {
+        get: (name: string) => name === 'X-Znx-Api-Id' ? 'my-api' : null,
+      } as never,
       cookies: {},
       type: 'api',
       cookiesAccepted: true,
@@ -213,7 +222,10 @@ Deno.test('getDefaultSessionHeaders returns default headers with cookies', async
   )
 
   assert(userHeaders['X-Znx-User-Id'].startsWith('my-user'))
-  assertMatch(userCookies[0], /^X-Znx-User-Session-Status=unconfirmed; Max-Age=0;/)
+  assertMatch(
+    userCookies[0],
+    /^X-Znx-User-Session-Status=unconfirmed; Max-Age=0;/,
+  )
   assertMatch(userCookies[1], /^X-Znx-User-Id=my-user; Max-Age=0;/)
 })
 

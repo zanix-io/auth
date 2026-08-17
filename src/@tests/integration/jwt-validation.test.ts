@@ -69,7 +69,10 @@ Deno.test('jwtValidation shoud return an error wihout token', async () => {
   const { response: noBearer } = await jwtValidationGuard()(context)
   const dataNoBearer = await noBearer?.json()
 
-  assertEquals(dataNoBearer.message, 'Authorization token is missing or invalid.')
+  assertEquals(
+    dataNoBearer.message,
+    'Authorization token is missing or invalid.',
+  )
   assert(noBearer?.headers.has('x-znx-user-session-status'))
 })
 
@@ -104,7 +107,10 @@ Deno.test('jwtValidation shoud return an error without envars', async () => {
   assertEquals(data.meta.method, 'getJWTKey')
   assertEquals(data.meta.keyType, 'user')
   assertEquals(data.meta.keyName, 'JWT_KEY')
-  assertEquals(data.cause, 'Missing required JWT key in environment variables: JWT_KEY.')
+  assertEquals(
+    data.cause,
+    'Missing required JWT key in environment variables: JWT_KEY.',
+  )
   assertEquals(response?.headers.get('x-znx-user-session-status'), 'failed')
 })
 
@@ -175,7 +181,10 @@ Deno.test('jwtValidation shoud return an error due token permissions', async () 
   Deno.env.set('JWT_KEY', 'my-secret')
   context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 
-  const { response } = await jwtValidationGuard({ iss: 'zanix-auth', permissions: 'admin' })(
+  const { response } = await jwtValidationGuard({
+    iss: 'zanix-auth',
+    permissions: 'admin',
+  })(
     context,
   )
   const data = await response?.json()
@@ -185,7 +194,10 @@ Deno.test('jwtValidation shoud return an error due token permissions', async () 
   assertEquals(data.meta.source, 'zanix')
   assertEquals(data.meta.method, 'verifyJWT')
   assertEquals(data.cause.code, 'INVALID_TOKEN_PERMISSIONS')
-  assertEquals(data.cause.cause, 'Insufficient permissions. Requires any of [admin].')
+  assertEquals(
+    data.cause.cause,
+    'Insufficient permissions. Requires any of [admin].',
+  )
   assertEquals(data.cause.meta.expectedAudience, 'admin')
   assertEquals(response?.headers.get('x-znx-user-session-status'), 'failed')
 })
@@ -221,7 +233,10 @@ Deno.test('jwtValidation shoud return an error with api session', async () => {
   const { response } = await jwtValidationGuard({ type: 'api' })(context)
   const data = await response?.json()
 
-  assertEquals(data.message, 'X-Znx-Authorization token is missing or invalid.')
+  assertEquals(
+    data.message,
+    'X-Znx-Authorization token is missing or invalid.',
+  )
   assertEquals(response?.headers.get('x-znx-api-session-status'), 'failed')
 })
 
@@ -230,7 +245,10 @@ Deno.test('jwtValidation shoud return an error with api session', async () => {
 // local and the Redis-backed path (`checkTokenBlockList` branches on `REDIS_URI`, which another
 // test file running earlier in the same process may have left set).
 const stubBlockListLookup = (context: ReturnType<typeof contextMock>) => {
-  const fakeCache = { local: new Map(), getCachedOrFetch: () => Promise.resolve(false) }
+  const fakeCache = {
+    local: new Map(),
+    getCachedOrFetch: () => Promise.resolve(false),
+  }
   context.providers.get = () => fakeCache as never
   context.connectors.get = () => ({ get: () => undefined } as never)
 }
@@ -242,7 +260,10 @@ Deno.test('jwtValidation type array: picks user when only Authorization is sent'
   Deno.env.set('JWT_KEY', 'my-secret')
   context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 
-  const { response } = await jwtValidationGuard({ type: ['api', 'user'], rateLimit: false })(
+  const { response } = await jwtValidationGuard({
+    type: ['api', 'user'],
+    rateLimit: false,
+  })(
     context,
   )
 
@@ -260,7 +281,10 @@ Deno.test('jwtValidation type array: picks api when only X-Znx-Authorization is 
   Deno.env.set('JWK_PUB', btoa(publicKey))
   context.req.headers.get = (name) => name === 'X-Znx-Authorization' ? `Bearer ${token}` : null
 
-  const { response } = await jwtValidationGuard({ type: ['api', 'user'], rateLimit: false })(
+  const { response } = await jwtValidationGuard({
+    type: ['api', 'user'],
+    rateLimit: false,
+  })(
     context,
   )
 
@@ -273,12 +297,19 @@ Deno.test('jwtValidation type array: picks api when only X-Znx-Authorization is 
 Deno.test('jwtValidation type array: reports first type when no header is sent', async () => {
   const context = contextMock()
 
-  const { response: apiFirst } = await jwtValidationGuard({ type: ['api', 'user'] })(context)
+  const { response: apiFirst } = await jwtValidationGuard({
+    type: ['api', 'user'],
+  })(context)
   assertEquals(
     (await apiFirst?.json()).message,
     'X-Znx-Authorization token is missing or invalid.',
   )
 
-  const { response: userFirst } = await jwtValidationGuard({ type: ['user', 'api'] })(context)
-  assertEquals((await userFirst?.json()).message, 'Authorization token is missing or invalid.')
+  const { response: userFirst } = await jwtValidationGuard({
+    type: ['user', 'api'],
+  })(context)
+  assertEquals(
+    (await userFirst?.json()).message,
+    'Authorization token is missing or invalid.',
+  )
 })

@@ -23,7 +23,11 @@ Deno.test({
 
     const mockFetch = spy((_url: string, opts: { body: string }) => {
       sentBody = JSON.parse(opts.body)
-      return jsonResponse({ accessToken: 'token-1', expiresIn: 1800, serviceId: 'billing' })
+      return jsonResponse({
+        accessToken: 'token-1',
+        expiresIn: 1800,
+        serviceId: 'billing',
+      })
     })
     globalThis.fetch = mockFetch as unknown as typeof fetch
 
@@ -31,14 +35,22 @@ Deno.test({
       serviceId: 'zanix-admin-hub',
       privateKey: btoa(privateKey),
     })
-    const headers = await auth('billing', 'http://billing.internal/admin/service-token')
+    const headers = await auth(
+      'billing',
+      'http://billing.internal/admin/service-token',
+    )
 
     assertEquals(headers, { 'X-Znx-Authorization': 'Bearer token-1' })
     assertSpyCalls(mockFetch, 1)
-    assertEquals(mockFetch.calls[0].args[0], 'http://billing.internal/admin/service-token')
+    assertEquals(
+      mockFetch.calls[0].args[0],
+      'http://billing.internal/admin/service-token',
+    )
 
     // The assertion sent identifies THIS caller (the hub), never the target.
-    const { payload } = decodeJWT((sentBody as { assertion: string }).assertion)
+    const { payload } = decodeJWT(
+      (sentBody as { assertion: string }).assertion,
+    )
     assertEquals(payload.iss, 'zanix-admin-hub')
     assertEquals(payload.sub, 'zanix-admin-hub')
   },
@@ -50,7 +62,11 @@ Deno.test({
   fn: async () => {
     const { privateKey } = await generateRSAKeys()
     const mockFetch = spy(() =>
-      jsonResponse({ accessToken: 'cached-token', expiresIn: 1800, serviceId: 'billing' })
+      jsonResponse({
+        accessToken: 'cached-token',
+        expiresIn: 1800,
+        serviceId: 'billing',
+      })
     )
     globalThis.fetch = mockFetch as unknown as typeof fetch
 
@@ -58,8 +74,14 @@ Deno.test({
       serviceId: 'zanix-admin-hub',
       privateKey: btoa(privateKey),
     })
-    const first = await auth('billing', 'http://billing.internal/admin/service-token')
-    const second = await auth('billing', 'http://billing.internal/admin/service-token')
+    const first = await auth(
+      'billing',
+      'http://billing.internal/admin/service-token',
+    )
+    const second = await auth(
+      'billing',
+      'http://billing.internal/admin/service-token',
+    )
 
     assertEquals(first, second)
     assertSpyCalls(mockFetch, 1)
@@ -74,7 +96,11 @@ Deno.test({
     let call = 0
     const mockFetch = spy(() => {
       call++
-      return jsonResponse({ accessToken: `token-${call}`, expiresIn: 1800, serviceId: 'x' })
+      return jsonResponse({
+        accessToken: `token-${call}`,
+        expiresIn: 1800,
+        serviceId: 'x',
+      })
     })
     globalThis.fetch = mockFetch as unknown as typeof fetch
 
@@ -82,8 +108,14 @@ Deno.test({
       serviceId: 'zanix-admin-hub',
       privateKey: btoa(privateKey),
     })
-    const billing = await auth('billing', 'http://billing.internal/admin/service-token')
-    const inventory = await auth('inventory', 'http://inventory.internal/admin/service-token')
+    const billing = await auth(
+      'billing',
+      'http://billing.internal/admin/service-token',
+    )
+    const inventory = await auth(
+      'inventory',
+      'http://inventory.internal/admin/service-token',
+    )
 
     assertEquals(billing, { 'X-Znx-Authorization': 'Bearer token-1' })
     assertEquals(inventory, { 'X-Znx-Authorization': 'Bearer token-2' })
@@ -100,7 +132,11 @@ Deno.test({
     const mockFetch = spy(() => {
       call++
       // Expires almost immediately — the 5s safety margin should treat it as already stale.
-      return jsonResponse({ accessToken: `token-${call}`, expiresIn: 1, serviceId: 'billing' })
+      return jsonResponse({
+        accessToken: `token-${call}`,
+        expiresIn: 1,
+        serviceId: 'billing',
+      })
     })
     globalThis.fetch = mockFetch as unknown as typeof fetch
 
@@ -108,8 +144,14 @@ Deno.test({
       serviceId: 'zanix-admin-hub',
       privateKey: btoa(privateKey),
     })
-    const first = await auth('billing', 'http://billing.internal/admin/service-token')
-    const second = await auth('billing', 'http://billing.internal/admin/service-token')
+    const first = await auth(
+      'billing',
+      'http://billing.internal/admin/service-token',
+    )
+    const second = await auth(
+      'billing',
+      'http://billing.internal/admin/service-token',
+    )
 
     assert(
       first !== second || mockFetch.calls.length === 2,
@@ -126,7 +168,11 @@ Deno.test({
     let sentBody: unknown
     globalThis.fetch = ((_url: string, opts: { body: string }) => {
       sentBody = JSON.parse(opts.body)
-      return jsonResponse({ accessToken: 't', expiresIn: 1800, serviceId: 'billing' })
+      return jsonResponse({
+        accessToken: 't',
+        expiresIn: 1800,
+        serviceId: 'billing',
+      })
     }) as unknown as typeof fetch
 
     const auth = createServiceAuthClient({
@@ -138,5 +184,35 @@ Deno.test({
 
     const { header } = decodeJWT((sentBody as { assertion: string }).assertion)
     assertEquals(header.kid, 'key2')
+  },
+})
+
+Deno.test({
+  name: 'createServiceAuthClient: an explicit httpClient is forwarded to the underlying RestClient',
+  fn: async () => {
+    const { privateKey } = await generateRSAKeys()
+    const httpClient = Deno.createHttpClient({})
+    let sentClient: unknown
+    globalThis.fetch = ((_url: string, opts: { client?: unknown }) => {
+      sentClient = opts.client
+      return jsonResponse({
+        accessToken: 't',
+        expiresIn: 1800,
+        serviceId: 'billing',
+      })
+    }) as unknown as typeof fetch
+
+    try {
+      const auth = createServiceAuthClient({
+        serviceId: 'zanix-admin-hub',
+        privateKey: btoa(privateKey),
+        httpClient,
+      })
+      await auth('billing', 'http://billing.internal/admin/service-token')
+
+      assertEquals(sentClient, httpClient)
+    } finally {
+      httpClient.close()
+    }
   },
 })

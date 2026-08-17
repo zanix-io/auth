@@ -17,7 +17,10 @@ export const asserts = async () => {
   // exp is computed via two independent Math.floor(Date.now() / 1000) calls (here and inside
   // addTokenToBlockList), so the effective TTL stored in the cache can be up to 1s shorter than
   // the nominal 5s. A wide margin on both sides absorbs that rounding slop plus Redis latency.
-  const token = await createJWT({ exp: Math.floor(Date.now() / 1000) + 5 }, 'my-secret')
+  const token = await createJWT(
+    { exp: Math.floor(Date.now() / 1000) + 5 },
+    'my-secret',
+  )
   const payload = await addTokenToBlockList(token, cache, localDb)
   const isBlocked = await checkTokenBlockList(payload.jti, cache, localDb)
   assert(isBlocked)

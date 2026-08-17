@@ -50,7 +50,9 @@ Deno.test({
     // checking `locals.session` first.
     const loginCtx = contextMock()
     loginCtx.req.headers.get = (name) => name === 'X-Znx-Cookies-Accepted' ? 'true' : null
-    const loginTokens = await generateSessionTokens(loginCtx, { subject: 'user@example.com' })
+    const loginTokens = await generateSessionTokens(loginCtx, {
+      subject: 'user@example.com',
+    })
     assert(loginTokens.accessToken)
     assert(loginTokens.refreshToken)
 
@@ -75,7 +77,9 @@ Deno.test({
         : null
     authedCtx.cookies = { [APP_TOKEN_COOKIE]: loginTokens.refreshToken }
 
-    const { response: guardResponse } = await jwtValidationGuard({ rateLimit: false })(authedCtx)
+    const { response: guardResponse } = await jwtValidationGuard({
+      rateLimit: false,
+    })(authedCtx)
     assertFalse(guardResponse)
     // Unlike the login step above, a guard runs *before* `contextSettingPipe`'s promotion, so
     // simulating the promotion immediately after the guard call (and before the interceptor) is
@@ -96,7 +100,10 @@ Deno.test({
     // refreshSessionTokens rejects as "not a refresh token".
     const refreshCtx = contextMock()
     refreshCtx.cookies = { [APP_TOKEN_COOKIE]: loginTokens.refreshToken }
-    const refreshed = await refreshSessionTokens(refreshCtx, undefined, { cache, kvDb })
+    const refreshed = await refreshSessionTokens(refreshCtx, undefined, {
+      cache,
+      kvDb,
+    })
     assert(refreshed.accessToken)
     assert(refreshed.refreshToken)
     assertEquals(refreshed.oldToken, loginTokens.refreshToken)
@@ -110,13 +117,21 @@ Deno.test({
     })
     assert(revokedPayload.jti)
 
-    const isBlocked = await checkTokenBlockList(revokedPayload.jti, cache, kvDb)
+    const isBlocked = await checkTokenBlockList(
+      revokedPayload.jti,
+      cache,
+      kvDb,
+    )
     assert(isBlocked, 'the revoked refresh token should be blocklisted')
 
     // A subsequent refresh attempt with the revoked token must be rejected.
     const postRevokeCtx = contextMock()
     await assertRejects(
-      () => refreshSessionTokens(postRevokeCtx, refreshed.refreshToken, { cache, kvDb }),
+      () =>
+        refreshSessionTokens(postRevokeCtx, refreshed.refreshToken, {
+          cache,
+          kvDb,
+        }),
       PermissionDenied,
     )
 

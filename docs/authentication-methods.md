@@ -106,7 +106,9 @@ session context — useful when you don't want to rely on an authenticator app:
 ```ts
 class LoginInteractor extends ZanixInteractor {
   public async requestOtp(user: { email: string }) {
-    const code = await this.providers.get('auth').otp.generate({ target: user.email })
+    const code = await this.providers.get('auth').otp.generate({
+      target: user.email,
+    })
 
     // Send `code` to the user yourself (email/SMS) — the library only generates and caches it.
     return { sent: true }
@@ -141,14 +143,19 @@ class TwoFactorInteractor extends ZanixInteractor {
     const totp = this.providers.get('auth').totp
 
     const secret = totp.generateSecret()
-    const uri = totp.getProvisioningUri(secret, user.email, { issuer: 'MyApp' })
+    const uri = totp.getProvisioningUri(secret, user.email, {
+      issuer: 'MyApp',
+    })
 
     // Render `uri` as a QR code for the user to scan, and persist `secret` yourself
     // (e.g. on the user record) — the library never stores it for you.
     return { uri }
   }
 
-  public async verify(user: { email: string; totpSecret: string }, code: string) {
+  public async verify(
+    user: { email: string; totpSecret: string },
+    code: string,
+  ) {
     // `permissions` here becomes the session token's `aud` claim — see Permissions & Scopes above.
     const session = await this.providers.get('auth').totp.authenticate(
       user.totpSecret,

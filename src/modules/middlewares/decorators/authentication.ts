@@ -43,6 +43,8 @@ import { jwtValidationGuard } from '../jwt-validation.guard.ts'
  * }
  * ```
  */
-export function AuthTokenValidation(options?: JWTValidationOpts): ZanixGenericDecorator {
+export function AuthTokenValidation(
+  options?: JWTValidationOpts,
+): ZanixGenericDecorator {
   return defineMiddlewareDecorator('guard', jwtValidationGuard(options))
 }

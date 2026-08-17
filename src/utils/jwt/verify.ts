@@ -36,7 +36,13 @@ export const verifyJWT = async (
   secret: string,
   options: JWTVerifyOptions = {},
 ): Promise<JWTPayload> => {
-  const { algorithm = 'HS256', iss = DEFAULT_AUTH_ISSUER, aud, sub, encryptionKey } = options
+  const {
+    algorithm = 'HS256',
+    iss = DEFAULT_AUTH_ISSUER,
+    aud,
+    sub,
+    encryptionKey,
+  } = options
   const [encodedHeader, encodedPayload, encodedSignature] = token.split('.')
 
   // Recreate the data part (header + payload) to check against the signature
@@ -66,21 +72,25 @@ export const verifyJWT = async (
   // Decrypt encrypted data
   if (payload.secureData) {
     if (isRSA && !encryptionKey) {
-      logger.warn('Encryption key is required to decrypt the secure data', 'noSave')
+      logger.warn(
+        'Encryption key is required to decrypt the secure data',
+        'noSave',
+      )
     } else {
       const secretToDecrypt = await generateHash(
         (encryptionKey || secret) + payload.jti,
         'medium',
         false,
       )
-      payload.secureData = await decryptAES(payload.secureData, secretToDecrypt).catch(() => {
-        logger.warn(
-          "Failed to decrypt payload's secure data. Please verify the encryption key",
-          'noSave',
-        )
+      payload.secureData = await decryptAES(payload.secureData, secretToDecrypt)
+        .catch(() => {
+          logger.warn(
+            "Failed to decrypt payload's secure data. Please verify the encryption key",
+            'noSave',
+          )
 
-        return payload.secureData
-      })
+          return payload.secureData
+        })
     }
   }
 

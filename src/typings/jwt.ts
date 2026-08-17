@@ -98,4 +98,6 @@ export type JWTOptions = {
 }
 
 /** JWT Verify settins */
-export type JWTVerifyOptions = JWTOptions & Pick<Partial<JWTPayload>, 'iss' | 'sub' | 'aud'>
+export type JWTVerifyOptions =
+  & JWTOptions
+  & Pick<Partial<JWTPayload>, 'iss' | 'sub' | 'aud'>

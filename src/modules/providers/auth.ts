@@ -45,7 +45,10 @@ export class ZanixAuthProvider extends ZanixCoreAuthProvider {
     connector: T,
     verbose: boolean = false,
   ): AuthConnectors[T] {
-    return this.getProviderConnector<AuthConnectors[T]>(authConnectors[connector], verbose)
+    return this.getProviderConnector<AuthConnectors[T]>(
+      authConnectors[connector],
+      verbose,
+    )
   }
 
   /**

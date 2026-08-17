@@ -37,7 +37,9 @@ const dynamicTruncate = (hmac: Uint8Array, digits: number): string => {
  *   standard recommendation for a SHA-1-based secret).
  * @returns {string} The Base32-encoded secret.
  */
-export const generateTOTPSecret = (length: number = DEFAULT_SECRET_LENGTH): string => {
+export const generateTOTPSecret = (
+  length: number = DEFAULT_SECRET_LENGTH,
+): string => {
   const bytes = new Uint8Array(length)
   crypto.getRandomValues(bytes)
   return base32Encode(bytes)

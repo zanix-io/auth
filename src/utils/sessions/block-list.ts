@@ -32,7 +32,10 @@ export async function checkTokenBlockList(
   const key = `${CACHE_KEYS.jwtBlockList}:${tokenId}`
 
   if (Deno.env.has('REDIS_URI')) {
-    const isInBlockList = await cache.getCachedOrFetch<boolean | undefined>('redis', key)
+    const isInBlockList = await cache.getCachedOrFetch<boolean | undefined>(
+      'redis',
+      key,
+    )
     return isInBlockList === true
   }
   let cacheValue = cache.local.get(key)

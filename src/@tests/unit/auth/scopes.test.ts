@@ -36,7 +36,10 @@ Deno.test('returns an error message when userScopes is empty', () => {
 
   const result = scopeValidation(baseScopes, userScopes)
 
-  assertEquals(result, 'Insufficient permissions. Requires any of [read, write, admin].')
+  assertEquals(
+    result,
+    'Insufficient permissions. Requires any of [read, write, admin].',
+  )
 })
 
 Deno.test('returns an error message when userScopes is undefined', () => {
@@ -44,7 +47,10 @@ Deno.test('returns an error message when userScopes is undefined', () => {
 
   const result = scopeValidation(baseScopes)
 
-  assertEquals(result, 'Insufficient permissions. Requires any of [read, write, admin].')
+  assertEquals(
+    result,
+    'Insufficient permissions. Requires any of [read, write, admin].',
+  )
 })
 
 Deno.test('returns OK when both sets are empty', () => {

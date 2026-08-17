@@ -28,7 +28,9 @@ export const decodeJWT = (
   try {
     const [encodedHeader, encodedPayload, encodedSignature] = token.split('.')
     // Decode the payload
-    const payload: JWTPayload = JSON.parse(base64UrlDecode(encodedPayload, true))
+    const payload: JWTPayload = JSON.parse(
+      base64UrlDecode(encodedPayload, true),
+    )
     const header: JWTHeader = JSON.parse(base64UrlDecode(encodedHeader, true))
 
     return {

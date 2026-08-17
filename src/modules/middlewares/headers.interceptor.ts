@@ -63,7 +63,8 @@ export const sessionHeadersInterceptor = (): MiddlewareInterceptor => {
     const authSessionType = type === 'anonymous' ? 'user' : type
 
     const { 'Set-Cookie': sessionCookies, ...sessionHeaders } = getSessionHeaders({
-      subject: subject || getClientSubject(headers, cookies, authSessionType) || session.id,
+      subject: subject ||
+        getClientSubject(headers, cookies, authSessionType) || session.id,
       expiration: payload?.exp,
       sessionStatus: status,
       type: authSessionType,

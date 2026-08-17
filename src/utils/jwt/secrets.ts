@@ -17,7 +17,10 @@ import { HttpError } from '@zanix/errors'
  *
  * @throws {HttpError} If the resolved environment variable for the key is missing.
  */
-export const getSecretByToken = (token: string, type: SessionTypes = 'user'): string => {
+export const getSecretByToken = (
+  token: string,
+  type: SessionTypes = 'user',
+): string => {
   const { header: { kid } } = decodeJWT(token)
 
   const keySuffix = kid ? `_${kid}` : ''

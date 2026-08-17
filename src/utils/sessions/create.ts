@@ -16,7 +16,9 @@ import { decodeJWT } from 'utils/jwt/decode.ts'
 import { parseTTL } from '@zanix/helpers'
 
 /** Get JWT secret */
-const getCurrentSecret = (type: SessionTypes): { value: string; version?: `V${number}` } => {
+const getCurrentSecret = (
+  type: SessionTypes,
+): { value: string; version?: `V${number}` } => {
   const isRSA = type === 'api'
   const keyName = isRSA ? 'JWK_PRI' : 'JWT_KEY'
 
@@ -24,15 +26,18 @@ const getCurrentSecret = (type: SessionTypes): { value: string; version?: `V${nu
 
   if (secret.value) return { ...secret, value: secret.value }
 
-  throw new InternalError(`An error occurred while creating the ${type} session.`, {
-    cause: `Missing required JWT key in environment variables: ${keyName}.`,
-    meta: {
-      source: 'zanix',
-      method: 'getJWTKey',
-      keyType: type,
-      keyName: keyName,
+  throw new InternalError(
+    `An error occurred while creating the ${type} session.`,
+    {
+      cause: `Missing required JWT key in environment variables: ${keyName}.`,
+      meta: {
+        source: 'zanix',
+        method: 'getJWTKey',
+        keyType: type,
+        keyName: keyName,
+      },
     },
-  })
+  )
 }
 
 /**
@@ -157,13 +162,16 @@ export const createAccessToken = async <T extends SessionTypes>(
   const exp = parseTTL(options.expiration)
 
   if (exp > 3600) {
-    throw new InternalError('Access token expiration should not exceed 1 hour', {
-      code: 'ACCESS_TOKEN_EXP_TOO_LONG',
-      meta: {
-        source: 'zanix',
-        expiration: exp,
+    throw new InternalError(
+      'Access token expiration should not exceed 1 hour',
+      {
+        code: 'ACCESS_TOKEN_EXP_TOO_LONG',
+        meta: {
+          source: 'zanix',
+          expiration: exp,
+        },
       },
-    })
+    )
   }
 
   const token = await createAppToken(options)

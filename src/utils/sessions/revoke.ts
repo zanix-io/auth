@@ -38,7 +38,9 @@ export const revokeAppTokens = (
   if (!tokenInfo) return Promise.resolve([])
 
   const tokens = Array.isArray(tokenInfo) ? tokenInfo : [tokenInfo]
-  return Promise.all(tokens.map((token) => addTokenToBlockList(token, cache, kvDb)))
+  return Promise.all(
+    tokens.map((token) => addTokenToBlockList(token, cache, kvDb)),
+  )
 }
 
 /**

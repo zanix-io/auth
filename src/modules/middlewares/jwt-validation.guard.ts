@@ -127,7 +127,9 @@ import {
  *   permissions: ["service:read"],
  * });
  */
-export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareGlobalGuard => {
+export const jwtValidationGuard = (
+  options: JWTValidationOpts = {},
+): MiddlewareGlobalGuard => {
   const {
     app,
     sub,
@@ -164,7 +166,12 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
     const authHeaderKey = AUTH_HEADERS[type]
     const cookiesAccepted = checkAcceptedCookies(ctxHeaders, cookies)
 
-    const defaultSessionOpts = { type, cookiesAccepted, headers: ctxHeaders, cookies }
+    const defaultSessionOpts = {
+      type,
+      cookiesAccepted,
+      headers: ctxHeaders,
+      cookies,
+    }
     const clientSubject = getClientSubject(ctxHeaders, cookies, type)
 
     // `matched` already proved its own `authHeader` starts with "Bearer " — no need to re-check
@@ -207,7 +214,10 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
         })
         if (e instanceof PermissionDenied) throw e
 
-        const response = httpErrorResponse(e, { headers: baseHeaders, contextId: ctx.id })
+        const response = httpErrorResponse(e, {
+          headers: baseHeaders,
+          contextId: ctx.id,
+        })
         addCookiesToResponse(response, cookies)
 
         return { response }
@@ -233,7 +243,9 @@ export const jwtValidationGuard = (options: JWTValidationOpts = {}): MiddlewareG
         ctx.connectors.get('kvLocal'),
       )
       if (isInBlockList) {
-        throw new PermissionDenied('The provided token has been revoked or is blocklisted.')
+        throw new PermissionDenied(
+          'The provided token has been revoked or is blocklisted.',
+        )
       }
 
       // Assign a session to the context

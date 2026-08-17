@@ -52,7 +52,10 @@ class TestGoogleConnector extends GoogleOAuth2Connector {
 
 Deno.test('generateAuthUrl() should include clientId, redirectUri and state', () => {
   const connector = new TestGoogleConnector(new MockRestClient())
-  const { url } = connector.generateAuthUrl({ state: 'test_state', scope: 'openid email' })
+  const { url } = connector.generateAuthUrl({
+    state: 'test_state',
+    scope: 'openid email',
+  })
 
   assertMatch(url, /client_id=test-client/)
   assertMatch(url, /redirect_uri=https%3A%2F%2Fexample\.com%2Fcallback/)

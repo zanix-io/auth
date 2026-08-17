@@ -25,6 +25,15 @@ export interface ServiceAuthClientOptions {
   keyId?: string
   /** How long each signed assertion stays valid. Defaults to `createServiceAssertion`'s own. */
   assertionExpiration?: number | string
+  /**
+   * Presents this client certificate on the exchange call itself — passed straight through to
+   * `RestClient`'s own constructor (`RequestOptions` already extends `RequestInit`, which Deno
+   * defines `client` on), so a caller reaching a target behind a genuinely mTLS-enforcing listener
+   * (one that requires a client certificate on EVERY connection, including the exchange endpoint,
+   * not only the data call after it) can present the SAME certificate for both. Omit entirely for
+   * plain HTTP/TLS with no client certificate (the default).
+   */
+  httpClient?: Deno.HttpClient
 }
 
 /** The header(s) to attach to an authenticated outbound request. */
@@ -63,10 +72,16 @@ const EXPIRY_SAFETY_MARGIN_MS = 5_000
  */
 export function createServiceAuthClient(
   options: ServiceAuthClientOptions,
-): (targetServiceId: string, exchangeUrl: string) => Promise<ServiceAuthHeaders> {
-  const { serviceId, privateKey, keyId, assertionExpiration } = options
-  const cache = new Map<string, { headers: ServiceAuthHeaders; expiresAt: number }>()
-  const client = new RestClient()
+): (
+  targetServiceId: string,
+  exchangeUrl: string,
+) => Promise<ServiceAuthHeaders> {
+  const { serviceId, privateKey, keyId, assertionExpiration, httpClient } = options
+  const cache = new Map<
+    string,
+    { headers: ServiceAuthHeaders; expiresAt: number }
+  >()
+  const client = new RestClient(httpClient ? { client: httpClient } : {})
 
   return async (targetServiceId, exchangeUrl) => {
     const cached = cache.get(targetServiceId)
@@ -79,11 +94,15 @@ export function createServiceAuthClient(
       expiration: assertionExpiration,
     })
 
-    const { accessToken, expiresIn } = await client.http.post<ServiceCredential>(exchangeUrl, {
+    const { accessToken, expiresIn } = await client.http.post<
+      ServiceCredential
+    >(exchangeUrl, {
       body: JSON.stringify({ assertion }),
     })
 
-    const headers: ServiceAuthHeaders = { [AUTH_HEADERS.api]: `Bearer ${accessToken}` }
+    const headers: ServiceAuthHeaders = {
+      [AUTH_HEADERS.api]: `Bearer ${accessToken}`,
+    }
     cache.set(targetServiceId, {
       headers,
       expiresAt: Date.now() + expiresIn * 1000 - EXPIRY_SAFETY_MARGIN_MS,

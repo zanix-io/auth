@@ -106,7 +106,8 @@ export const rateLimitGuard = (
     )
 
     const dateInSeconds = Math.floor(Date.now() / 1000) - createdAt
-    const windowEnd = dateInSeconds - (dateInSeconds % windowSeconds) + windowSeconds
+    const windowEnd = dateInSeconds - (dateInSeconds % windowSeconds) +
+      windowSeconds
     const secondsUntilReset = (windowEnd - dateInSeconds).toString()
 
     if (!canContinue) {
@@ -116,14 +117,17 @@ export const rateLimitGuard = (
           message: 'Too Many Requests',
           meta: {
             source: 'zanix',
-            sessionId,
+            sessionRef: sessionId,
             sessionType,
             rateLimit,
             windowSeconds,
             requestId: ctx.id,
           },
         }),
-        { headers: { [retryAfterHeader]: secondsUntilReset }, contextId: ctx.id },
+        {
+          headers: { [retryAfterHeader]: secondsUntilReset },
+          contextId: ctx.id,
+        },
       )
       return { response }
     }

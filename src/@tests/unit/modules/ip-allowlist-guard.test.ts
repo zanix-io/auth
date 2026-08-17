@@ -30,19 +30,28 @@ Deno.test('ipAllowlistGuard: does not throw when allow is set with trustProxyHea
 })
 
 Deno.test('ipAllowlistGuard: allows an exact IP match', async () => {
-  const guard = ipAllowlistGuard({ allow: ['203.0.113.5'], trustProxyHeader: true })
+  const guard = ipAllowlistGuard({
+    allow: ['203.0.113.5'],
+    trustProxyHeader: true,
+  })
   const result = await guard(createCtx({ 'x-forwarded-for': '203.0.113.5' }))
   assertEquals(result, {})
 })
 
 Deno.test('ipAllowlistGuard: rejects a non-matching exact IP with a 403', async () => {
-  const guard = ipAllowlistGuard({ allow: ['203.0.113.5'], trustProxyHeader: true })
+  const guard = ipAllowlistGuard({
+    allow: ['203.0.113.5'],
+    trustProxyHeader: true,
+  })
   const result = await guard(createCtx({ 'x-forwarded-for': '203.0.113.6' }))
   assertEquals(result.response?.status, 403)
 })
 
 Deno.test('ipAllowlistGuard: allows an IP inside a configured CIDR range', async () => {
-  const guard = ipAllowlistGuard({ allow: ['10.0.0.0/8'], trustProxyHeader: true })
+  const guard = ipAllowlistGuard({
+    allow: ['10.0.0.0/8'],
+    trustProxyHeader: true,
+  })
   const result = await guard(createCtx({ 'x-forwarded-for': '10.4.5.6' }))
   assertEquals(result, {})
 })
@@ -69,13 +78,19 @@ Deno.test('ipAllowlistGuard: falls back to ADMIN_IP_ALLOWLIST when allow is omit
   Deno.env.set('ADMIN_IP_ALLOWLIST', '10.0.0.0/8, 192.168.1.5')
   try {
     const guard = ipAllowlistGuard({ trustProxyHeader: true })
-    const insideRange = await guard(createCtx({ 'x-forwarded-for': '10.1.2.3' }))
+    const insideRange = await guard(
+      createCtx({ 'x-forwarded-for': '10.1.2.3' }),
+    )
     assertEquals(insideRange, {})
 
-    const exactMatch = await guard(createCtx({ 'x-forwarded-for': '192.168.1.5' }))
+    const exactMatch = await guard(
+      createCtx({ 'x-forwarded-for': '192.168.1.5' }),
+    )
     assertEquals(exactMatch, {})
 
-    const outsideRange = await guard(createCtx({ 'x-forwarded-for': '8.8.8.8' }))
+    const outsideRange = await guard(
+      createCtx({ 'x-forwarded-for': '8.8.8.8' }),
+    )
     assertEquals(outsideRange.response?.status, 403)
   } finally {
     Deno.env.delete('ADMIN_IP_ALLOWLIST')
@@ -85,7 +100,10 @@ Deno.test('ipAllowlistGuard: falls back to ADMIN_IP_ALLOWLIST when allow is omit
 Deno.test('ipAllowlistGuard: explicit allow overrides ADMIN_IP_ALLOWLIST', async () => {
   Deno.env.set('ADMIN_IP_ALLOWLIST', '203.0.113.5')
   try {
-    const guard = ipAllowlistGuard({ allow: ['10.0.0.1'], trustProxyHeader: true })
+    const guard = ipAllowlistGuard({
+      allow: ['10.0.0.1'],
+      trustProxyHeader: true,
+    })
     const result = await guard(createCtx({ 'x-forwarded-for': '203.0.113.5' }))
     assertEquals(result.response?.status, 403)
   } finally {
@@ -116,19 +134,28 @@ Deno.test('ipAllowlistGuard: prefers x-real-ip over x-forwarded-for', async () =
 })
 
 Deno.test('ipAllowlistGuard: falls back to cf-connecting-ip', async () => {
-  const guard = ipAllowlistGuard({ allow: ['203.0.113.9'], trustProxyHeader: true })
+  const guard = ipAllowlistGuard({
+    allow: ['203.0.113.9'],
+    trustProxyHeader: true,
+  })
   const result = await guard(createCtx({ 'cf-connecting-ip': '203.0.113.9' }))
   assertEquals(result, {})
 })
 
 Deno.test('ipAllowlistGuard: falls back to x-real-ip when the other two are absent', async () => {
-  const guard = ipAllowlistGuard({ allow: ['203.0.113.10'], trustProxyHeader: true })
+  const guard = ipAllowlistGuard({
+    allow: ['203.0.113.10'],
+    trustProxyHeader: true,
+  })
   const result = await guard(createCtx({ 'x-real-ip': '203.0.113.10' }))
   assertEquals(result, {})
 })
 
 Deno.test('ipAllowlistGuard: rejects when no known proxy header is present at all', async () => {
-  const guard = ipAllowlistGuard({ allow: ['203.0.113.10'], trustProxyHeader: true })
+  const guard = ipAllowlistGuard({
+    allow: ['203.0.113.10'],
+    trustProxyHeader: true,
+  })
   const result = await guard(createCtx())
   assertEquals(result.response?.status, 403)
 })

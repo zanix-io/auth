@@ -47,7 +47,15 @@ export class GoogleOAuth2Connector extends OAuth2Connector<GoogleUserInfo> {
       userInfoUrl: ROUTES.userInfo,
       revokeUrl: ROUTES.revoke,
       defaultScope: 'openid email profile',
-    }, { clientId, clientSecret, redirectUri, authUrl, userInfoUrl, revokeUrl, ...opts })
+    }, {
+      clientId,
+      clientSecret,
+      redirectUri,
+      authUrl,
+      userInfoUrl,
+      revokeUrl,
+      ...opts,
+    })
   }
 
   /** Google-specific authorize-URL params: request incremental scopes and force the consent screen. */

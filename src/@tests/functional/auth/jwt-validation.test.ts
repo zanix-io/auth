@@ -39,7 +39,10 @@ Deno.test({
   fn: async () => {
     const context = await initialize()
 
-    const token = await createJWT({ exp: Math.floor(Date.now() / 1000) + 1 }, 'my-secret')
+    const token = await createJWT(
+      { exp: Math.floor(Date.now() / 1000) + 1 },
+      'my-secret',
+    )
 
     context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 
@@ -52,7 +55,10 @@ Deno.test({
 
     assertEquals(error.status.code, 'FORBIDDEN')
     assertEquals(error.cause.name, 'PermissionDenied')
-    assertEquals(error.cause.message, 'The provided token has been revoked or is blocklisted.')
+    assertEquals(
+      error.cause.message,
+      'The provided token has been revoked or is blocklisted.',
+    )
   },
 })
 
@@ -66,7 +72,9 @@ Deno.test({
     const token = await createJWT({}, 'my-secret')
     context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 
-    const { response } = await jwtValidationGuard({ rateLimit: false })(context)
+    const { response } = await jwtValidationGuard({ rateLimit: false })(
+      context,
+    )
 
     assertFalse(response)
     // The session carries this request's own verified access token — distinct from the refresh
@@ -80,7 +88,10 @@ Deno.test({
 
     const responseSession = new Response()
     await sessionHeadersInterceptor()(context, responseSession)
-    assertEquals(responseSession.headers.get('X-Znx-User-Session-Status'), 'active')
+    assertEquals(
+      responseSession.headers.get('X-Znx-User-Session-Status'),
+      'active',
+    )
     // deno-lint-ignore no-non-null-assertion
     assert(isUUID(responseSession.headers.get('X-Znx-User-Id')!))
   },
@@ -110,7 +121,10 @@ Deno.test({
     ])
 
     const error = await response.json()
-    assertEquals(error.cause.meta.reason, 'No session found with a valid rate limit configuration.')
+    assertEquals(
+      error.cause.meta.reason,
+      'No session found with a valid rate limit configuration.',
+    )
   },
 })
 
@@ -121,7 +135,10 @@ Deno.test({
   fn: async () => {
     const context = await initialize()
 
-    const token = await createJWT({ rateLimit: 2, sub: 'my-user-id' }, 'my-secret')
+    const token = await createJWT(
+      { rateLimit: 2, sub: 'my-user-id' },
+      'my-secret',
+    )
     context.req.headers.get = (name) =>
       name === 'Authorization'
         ? `Bearer ${token}`
@@ -131,7 +148,10 @@ Deno.test({
         ? 'active'
         : null
 
-    await Promise.all([jwtValidationGuard()(context), jwtValidationGuard()(context)])
+    await Promise.all([
+      jwtValidationGuard()(context),
+      jwtValidationGuard()(context),
+    ])
 
     const { response } = await jwtValidationGuard()(context)
     assert(response)
@@ -159,7 +179,10 @@ Deno.test({
     context.req.headers.get = (name) => name === 'X-Znx-Authorization' ? `Bearer ${token}` : null
 
     Deno.env.set('JWK_PUB', btoa(publicKey))
-    const { response } = await jwtValidationGuard({ rateLimit: false, type: 'api' })(
+    const { response } = await jwtValidationGuard({
+      rateLimit: false,
+      type: 'api',
+    })(
       context,
     )
     assertFalse(response)
@@ -168,7 +191,10 @@ Deno.test({
     const responseSession = new Response()
     await sessionHeadersInterceptor()(context, responseSession)
 
-    assertEquals(responseSession.headers.get('X-Znx-Api-Session-Status'), 'active')
+    assertEquals(
+      responseSession.headers.get('X-Znx-Api-Session-Status'),
+      'active',
+    )
     // deno-lint-ignore no-non-null-assertion
     assert(isUUID(responseSession.headers.get('X-Znx-Api-Id')!))
   },
@@ -197,7 +223,10 @@ Deno.test({
     const responseSession = new Response()
     await sessionHeadersInterceptor()(context, responseSession)
 
-    assertEquals(responseSession.headers.get('X-Znx-User-Session-Status'), 'active')
+    assertEquals(
+      responseSession.headers.get('X-Znx-User-Session-Status'),
+      'active',
+    )
     // deno-lint-ignore no-non-null-assertion
     assert(isUUID(responseSession.headers.get('X-Znx-User-Id')!))
   },
@@ -230,7 +259,9 @@ Deno.test({
         ? 'true'
         : null
 
-    const { response } = await jwtValidationGuard({ rateLimit: false })(context)
+    const { response } = await jwtValidationGuard({ rateLimit: false })(
+      context,
+    )
     assertFalse(response)
     context.session = context.locals.session as never // see the earlier test's own comment
 

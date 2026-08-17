@@ -85,7 +85,10 @@ export abstract class OAuth2Connector<TUserInfo> extends RestClient {
    *
    * @throws {TargetError} If `clientId`, `clientSecret`, or `redirectUri` is missing.
    */
-  constructor(defaults: OAuth2ConnectorConfig, options: OAuth2ConnectorOptions = {}) {
+  constructor(
+    defaults: OAuth2ConnectorConfig,
+    options: OAuth2ConnectorOptions = {},
+  ) {
     const {
       clientId,
       clientSecret,
@@ -113,7 +116,13 @@ export abstract class OAuth2Connector<TUserInfo> extends RestClient {
     this.clientId = clientId
     this.clientSecret = clientSecret
     this.redirectUri = redirectUri
-    this.#config = { authUrl, userInfoUrl, revokeUrl, defaultScope, responseType }
+    this.#config = {
+      authUrl,
+      userInfoUrl,
+      revokeUrl,
+      defaultScope,
+      responseType,
+    }
   }
 
   /**

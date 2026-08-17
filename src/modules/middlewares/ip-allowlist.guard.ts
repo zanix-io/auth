@@ -67,16 +67,19 @@ export const ipAllowlistGuard = (
     .map((entry) => entry.trim()).filter(Boolean)
 
   if (allow?.length && !trustProxyHeader) {
-    throw new InternalError('Cannot configure ipAllowlistGuard without trusting a proxy header.', {
-      cause: 'An IP allowlist was configured but `trustProxyHeader` was not set to `true`.',
-      meta: {
-        source: 'zanix',
-        method: 'ipAllowlistGuard',
-        reason:
-          'The client IP is resolved from spoofable headers (x-forwarded-for, cf-connecting-ip, ' +
-          'x-real-ip). Set `trustProxyHeader: true` to explicitly acknowledge this.',
+    throw new InternalError(
+      'Cannot configure ipAllowlistGuard without trusting a proxy header.',
+      {
+        cause: 'An IP allowlist was configured but `trustProxyHeader` was not set to `true`.',
+        meta: {
+          source: 'zanix',
+          method: 'ipAllowlistGuard',
+          reason:
+            'The client IP is resolved from spoofable headers (x-forwarded-for, cf-connecting-ip, ' +
+            'x-real-ip). Set `trustProxyHeader: true` to explicitly acknowledge this.',
+        },
       },
-    })
+    )
   }
 
   return (ctx) => {

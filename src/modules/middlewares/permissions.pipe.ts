@@ -55,7 +55,10 @@ export const permissionsPipe = (
       })
     }
 
-    const validation = scopeValidation(uniquePermissions, new Set(session.scope))
+    const validation = scopeValidation(
+      uniquePermissions,
+      new Set(session.scope),
+    )
 
     if (validation !== 'OK') {
       throw new HttpError('FORBIDDEN', {

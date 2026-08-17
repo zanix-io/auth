@@ -42,6 +42,7 @@ export type {
 export { createJWT } from 'utils/jwt/create.ts'
 export { verifyJWT } from 'utils/jwt/verify.ts'
 export { decodeJWT } from 'utils/jwt/decode.ts'
+export { DEFAULT_AUTH_ISSUER } from 'utils/constants.ts'
 
 // Block List
 export { addTokenToBlockList, checkTokenBlockList } from 'utils/sessions/block-list.ts'
@@ -99,13 +100,19 @@ export { getSecretByToken } from 'utils/jwt/secrets.ts'
 /**
  * Represents the main session/auth headers for a user context.
  */
-export const userSessionHeaders: { sub: string; session: string; token: string } =
-  SESSION_HEADERS['user']
+export const userSessionHeaders: {
+  sub: string
+  session: string
+  token: string
+} = SESSION_HEADERS['user']
 /**
  * Represents the main session/auth headers for API requests.
  */
-export const apiSessionHeaders: { sub: string; session: string; token: undefined } =
-  SESSION_HEADERS['api']
+export const apiSessionHeaders: {
+  sub: string
+  session: string
+  token: undefined
+} = SESSION_HEADERS['api']
 
 // Middlewares
 export { sessionHeadersInterceptor } from 'modules/middlewares/headers.interceptor.ts'

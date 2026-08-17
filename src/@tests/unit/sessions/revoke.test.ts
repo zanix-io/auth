@@ -37,7 +37,10 @@ Deno.test('Create access token with correct local session', async () => {
 })
 
 Deno.test('revokeAppTokens returns an empty array when tokenInfo is falsy', async () => {
-  const result = await revokeAppTokens(undefined as unknown as string, {} as any)
+  const result = await revokeAppTokens(
+    undefined as unknown as string,
+    {} as any,
+  )
   assertEquals(result, [])
 })
 
@@ -45,7 +48,10 @@ Deno.test('revokeAppTokens accepts a single token string (non-array branch)', as
   Deno.env.set('JWT_KEY', 'my secret')
   Deno.env.delete('REDIS_URI')
 
-  const token = await createJWT({ exp: 10, sub: 'mock@example.com' }, 'my secret')
+  const token = await createJWT(
+    { exp: 10, sub: 'mock@example.com' },
+    'my secret',
+  )
   const cache = { local: { set: () => {} } } as any
 
   const [payload] = await revokeAppTokens(token, cache)
@@ -59,7 +65,10 @@ Deno.test('revokeSessionToken reads the refresh token from cookies when omitted'
   Deno.env.set('JWT_KEY', 'my secret')
   Deno.env.delete('REDIS_URI')
 
-  const token = await createJWT({ exp: 10, sub: 'mock@example.com' }, 'my secret')
+  const token = await createJWT(
+    { exp: 10, sub: 'mock@example.com' },
+    'my secret',
+  )
   const cache = { local: { set: () => {} } } as any
 
   const payload = await revokeSessionToken(
@@ -74,7 +83,10 @@ Deno.test('revokeSessionToken reads the refresh token from cookies when omitted'
 
 Deno.test('revokeSessionToken throws when there is no token to revoke', async () => {
   await assertRejects(
-    () => revokeSessionToken({ locals: {}, cookies: {} } as any, { cache: {} as any }),
+    () =>
+      revokeSessionToken({ locals: {}, cookies: {} } as any, {
+        cache: {} as any,
+      }),
     HttpError,
   )
 })
@@ -84,8 +96,14 @@ Deno.test('revokeSessionToken also revokes the token already stored in ctx.sessi
   Deno.env.delete('REDIS_URI')
 
   const futureExp = Math.floor(Date.now() / 1000) + 100
-  const token = await createJWT({ exp: futureExp, sub: 'mock@example.com' }, 'my secret')
-  const sessionToken = await createJWT({ exp: futureExp, sub: 'other@example.com' }, 'my secret')
+  const token = await createJWT(
+    { exp: futureExp, sub: 'mock@example.com' },
+    'my secret',
+  )
+  const sessionToken = await createJWT({
+    exp: futureExp,
+    sub: 'other@example.com',
+  }, 'my secret')
 
   const revokedKeys: string[] = []
   const cache = {

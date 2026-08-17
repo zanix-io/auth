@@ -63,7 +63,9 @@ Deno.test('generateAuthUrl() defaults to response_type=token and no extra params
 })
 
 Deno.test('generateAuthUrl() honors a per-instance responseType override', () => {
-  const connector = new TestOAuth2Connector(new MockRestClient(), { responseType: 'code' })
+  const connector = new TestOAuth2Connector(new MockRestClient(), {
+    responseType: 'code',
+  })
   const { url } = connector.generateAuthUrl()
 
   assertMatch(url, /response_type=code/)

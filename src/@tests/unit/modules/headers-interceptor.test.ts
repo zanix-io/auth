@@ -47,7 +47,9 @@ Deno.test(
         token: refreshToken,
       },
       req: {
-        headers: { get: (key: string) => key === 'X-Znx-Cookies-Accepted' ? 'true' : null },
+        headers: {
+          get: (key: string) => key === 'X-Znx-Cookies-Accepted' ? 'true' : null,
+        },
       },
     })
 
@@ -109,9 +111,19 @@ Deno.test('sessionHeadersInterceptor prefers ctx.locals.session over a stale ctx
   // what a handler-stage `defineLocalSession` call (e.g. revoke/logout) set afterward. The fresher
   // `locals.session` must win.
   const ctx = createCtx({
-    session: { type: 'anonymous', status: 'active', id: 'stale-session-id', payload: {} },
+    session: {
+      type: 'anonymous',
+      status: 'active',
+      id: 'stale-session-id',
+      payload: {},
+    },
     locals: {
-      session: { type: 'anonymous', status: 'revoked', id: 'fresh-session-id', payload: {} },
+      session: {
+        type: 'anonymous',
+        status: 'revoked',
+        id: 'fresh-session-id',
+        payload: {},
+      },
     },
   })
 

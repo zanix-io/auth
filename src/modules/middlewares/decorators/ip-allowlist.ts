@@ -27,6 +27,8 @@ import { ipAllowlistGuard, type IpAllowlistOptions } from '../ip-allowlist.guard
  * }
  * ```
  */
-export function IpAllowlistGuard(options?: IpAllowlistOptions): ZanixGenericDecorator {
+export function IpAllowlistGuard(
+  options?: IpAllowlistOptions,
+): ZanixGenericDecorator {
   return defineMiddlewareDecorator('guard', ipAllowlistGuard(options))
 }

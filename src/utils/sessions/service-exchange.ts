@@ -96,7 +96,8 @@ export const createServiceAssertion = async (options: {
 }): Promise<string> => {
   const { serviceId, expiration = SERVICE_ASSERTION_DEFAULT_EXP } = options
   const keyId = options.keyId ?? resolveServiceAssertionKeyId(serviceId)
-  const privateKey = options.privateKey ?? resolveServiceAssertionPrivateKey(serviceId, keyId)
+  const privateKey = options.privateKey ??
+    resolveServiceAssertionPrivateKey(serviceId, keyId)
 
   // `async` (rather than a plain function returning `createJWT`'s own promise) so a malformed
   // `privateKey` — `atob()` throws synchronously on a raw, un-base64'd PEM — surfaces as a rejected
@@ -133,7 +134,10 @@ export function resolveServiceAssertionKeyId(serviceId: string): string {
  *
  * @throws {InternalError} If nothing is registered under the resolved env var name.
  */
-export function resolveServiceAssertionPrivateKey(serviceId: string, keyId: string): string {
+export function resolveServiceAssertionPrivateKey(
+  serviceId: string,
+  keyId: string,
+): string {
   const keyName = keyId === serviceId ? `JWK_PRI_${serviceId}` : `JWK_PRI_${serviceId}_${keyId}`
   const secret = Deno.env.get(keyName)
 
@@ -142,7 +146,14 @@ export function resolveServiceAssertionPrivateKey(serviceId: string, keyId: stri
   throw new InternalError(
     `Missing private key to sign a service assertion for "${serviceId}" — register ` +
       `"${keyName}", or pass "privateKey" explicitly to createServiceAssertion().`,
-    { meta: { source: 'zanix', method: 'createServiceAssertion', serviceId, keyId } },
+    {
+      meta: {
+        source: 'zanix',
+        method: 'createServiceAssertion',
+        serviceId,
+        keyId,
+      },
+    },
   )
 }
 
@@ -176,7 +187,12 @@ function resolveServiceAssertionKey(serviceId: string, keyId: string): string {
   throw new HttpError('INTERNAL_SERVER_ERROR', {
     message: 'An error occurred during service-credential authentication.',
     cause: `Missing required JWK public key in environment variables: ${keyName}.`,
-    meta: { source: 'zanix', method: 'exchangeServiceCredential', serviceId, keyId },
+    meta: {
+      source: 'zanix',
+      method: 'exchangeServiceCredential',
+      serviceId,
+      keyId,
+    },
   })
 }
 

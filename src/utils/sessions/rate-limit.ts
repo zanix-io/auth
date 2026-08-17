@@ -50,43 +50,55 @@ export async function checkRateLimit(cache: ZanixCacheProvider, options: {
     return JSON.parse(result as string) as CheckRateLimitResult
   }
 
-  return cache.withLock(key, () =>
-    new Promise<CheckRateLimitResult>((resolve) => {
-      let data
-      const localData = cache.local.get<{ count: number; createdAt: number }>(key)
-
-      if (localData === undefined) {
-        data = { count: 1, createdAt: Math.floor(Date.now() / 1000) }
-        cache.local.set(key, data, { exp: windowSeconds })
-      } else data = localData
-
-      const { count, createdAt } = data
-
-      // rate limit exceeded
-      if (count > maxRequests) {
-        const failedAttempts = cache.local.get(failedAttemptsKey) as number
-        if (failedAttempts >= maxFaildedAttempts) cache.local.delete(failedAttemptsKey)
-
-        return resolve({ count, createdAt, failedAttempts, canContinue: false })
-      }
-
-      // Save failedAttempts to track consecutive failures and check against maxFailedAttempts.
-      if (count === 1 && maxFaildedAttempts) {
-        const failedAttempts = cache.local.get(failedAttemptsKey) || 0
-        cache.local.set(
-          failedAttemptsKey,
-          failedAttempts + 1,
-          { exp: windowSeconds * maxFaildedAttempts * 2 },
+  return cache.withLock(
+    key,
+    () =>
+      new Promise<CheckRateLimitResult>((resolve) => {
+        let data
+        const localData = cache.local.get<{ count: number; createdAt: number }>(
+          key,
         )
-      }
 
-      data.count++
+        if (localData === undefined) {
+          data = { count: 1, createdAt: Math.floor(Date.now() / 1000) }
+          cache.local.set(key, data, { exp: windowSeconds })
+        } else data = localData
 
-      setTimeout(() => {
-        cache.local.set(key, data, { exp: 'KEEPTTL' })
-        resolve({ count, createdAt, failedAttempts: 0, canContinue: true })
-      })
-    }))
+        const { count, createdAt } = data
+
+        // rate limit exceeded
+        if (count > maxRequests) {
+          const failedAttempts = cache.local.get(failedAttemptsKey) as number
+          if (failedAttempts >= maxFaildedAttempts) {
+            cache.local.delete(failedAttemptsKey)
+          }
+
+          return resolve({
+            count,
+            createdAt,
+            failedAttempts,
+            canContinue: false,
+          })
+        }
+
+        // Save failedAttempts to track consecutive failures and check against maxFailedAttempts.
+        if (count === 1 && maxFaildedAttempts) {
+          const failedAttempts = cache.local.get(failedAttemptsKey) || 0
+          cache.local.set(
+            failedAttemptsKey,
+            failedAttempts + 1,
+            { exp: windowSeconds * maxFaildedAttempts * 2 },
+          )
+        }
+
+        data.count++
+
+        setTimeout(() => {
+          cache.local.set(key, data, { exp: 'KEEPTTL' })
+          resolve({ count, createdAt, failedAttempts: 0, canContinue: true })
+        })
+      }),
+  )
 }
 
 /**

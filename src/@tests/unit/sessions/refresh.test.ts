@@ -28,7 +28,10 @@ Deno.test('refreshSessionTokens reads the refresh token from cookies when omitte
     subject: 'user@example.com',
   })
 
-  const ctx = { locals: {}, cookies: { 'X-Znx-App-Token': refreshToken } } as any
+  const ctx = {
+    locals: {},
+    cookies: { 'X-Znx-App-Token': refreshToken },
+  } as any
   const result = await refreshSessionTokens(ctx, undefined)
 
   assert(result.accessToken)
@@ -99,7 +102,10 @@ Deno.test('refreshSessionTokens succeeds when the token is not in the block list
   const cache = { local: { get: () => undefined } } as any
   const kvDb = { get: () => undefined } as any
 
-  const result = await refreshSessionTokens(createCtx(), refreshToken, { cache, kvDb })
+  const result = await refreshSessionTokens(createCtx(), refreshToken, {
+    cache,
+    kvDb,
+  })
 
   assert(result.accessToken)
 

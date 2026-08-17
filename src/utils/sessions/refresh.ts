@@ -71,7 +71,9 @@ export const refreshSessionTokens = async (
     )
 
     if (isInBlockList) {
-      throw new PermissionDenied('The refresh token has been revoked or is blocklisted.')
+      throw new PermissionDenied(
+        'The refresh token has been revoked or is blocklisted.',
+      )
     }
   }
 

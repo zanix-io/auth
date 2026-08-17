@@ -75,9 +75,15 @@ export function getSessionHeaders(options: {
     const baseCookie = 'Path=/; HttpOnly; SameSite=Strict'
     const baseCookieWithExp = `Max-Age=${maxAge}; ${baseCookie}`
 
-    headers['Set-Cookie'].push(`${statusHeader}=${sessionStatus}; ${baseCookieWithExp}`)
-    headers['Set-Cookie'].push(`${subjectHeader}=${subject}; ${baseCookieWithExp}`)
-    headers['Set-Cookie'].push(`${cookiesAcceptedHeader}=true; ${baseCookieWithExp}`)
+    headers['Set-Cookie'].push(
+      `${statusHeader}=${sessionStatus}; ${baseCookieWithExp}`,
+    )
+    headers['Set-Cookie'].push(
+      `${subjectHeader}=${subject}; ${baseCookieWithExp}`,
+    )
+    headers['Set-Cookie'].push(
+      `${cookiesAcceptedHeader}=true; ${baseCookieWithExp}`,
+    )
 
     if (tokenHeader && (refreshToken || maxAge === 0)) {
       // The refresh-token cookie's lifetime must match the refresh token's OWN expiration
@@ -90,7 +96,9 @@ export function getSessionHeaders(options: {
       // maxAge !== 0), but TypeScript can't infer that across statements — kept for narrowing.
       const refreshTokenMaxAge = maxAge === 0 || !refreshToken ? 0 : Math.max(
         0,
-        Math.floor((decodeJWT(refreshToken).payload.exp ?? nowInSeconds) - nowInSeconds),
+        Math.floor(
+          (decodeJWT(refreshToken).payload.exp ?? nowInSeconds) - nowInSeconds,
+        ),
       )
       headers['Set-Cookie'].push(
         `${tokenHeader}=${refreshToken}; Max-Age=${refreshTokenMaxAge}; ${baseCookie}`,
@@ -134,7 +142,12 @@ export const getDefaultSessionHeaders = async (options: {
   const { headers, type, cookiesAccepted, sessionStatus, cookies } = options
   const clientSubject = getClientSubject(headers, cookies, type)
   const baseSubject = clientSubject || await getAnonymousSessionId(headers)
-  return getSessionHeaders({ cookiesAccepted, type, sessionStatus, subject: baseSubject })
+  return getSessionHeaders({
+    cookiesAccepted,
+    type,
+    sessionStatus,
+    subject: baseSubject,
+  })
 }
 
 /**

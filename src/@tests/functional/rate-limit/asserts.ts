@@ -34,7 +34,10 @@ export const addValidSessionHeaders = async () => {
   await sessionHeadersInterceptor()(context, response)
 
   assert(response.headers.get('X-Znx-User-Id')?.startsWith('anonymous-'))
-  assertEquals(response.headers.get('X-Znx-User-Session-Status'), 'unconfirmed')
+  assertEquals(
+    response.headers.get('X-Znx-User-Session-Status'),
+    'unconfirmed',
+  )
 }
 
 export const shouldNotAddSessionHeaders = async () => {
@@ -51,7 +54,9 @@ export const shouldNotAddSessionHeaders = async () => {
   assertFalse(baseHeaders['X-Znx-User-Session-Status'])
 }
 
-export const shouldSupportConcurrency = async (cache: 'cache:local' | 'cache:redis') => {
+export const shouldSupportConcurrency = async (
+  cache: 'cache:local' | 'cache:redis',
+) => {
   await import('@zanix/datamaster/core') // load cache core
   await (ProgramModule.connectors.get<ZanixCacheConnector>(cache)).clear() // reset data
   const context = contextMock()
@@ -82,7 +87,9 @@ export const shouldSupportConcurrency = async (cache: 'cache:local' | 'cache:red
   assertAlmostEquals(reset, expectedReset, 2)
 }
 
-export const shouldFailDueLimitAnonymous = async (cache: 'cache:local' | 'cache:redis') => {
+export const shouldFailDueLimitAnonymous = async (
+  cache: 'cache:local' | 'cache:redis',
+) => {
   await import('@zanix/datamaster/core') // load cache core
   // deno-lint-ignore no-explicit-any
   await ProgramModule.connectors.get<any>(cache).clear() // reset data
@@ -100,7 +107,7 @@ export const shouldFailDueLimitAnonymous = async (cache: 'cache:local' | 'cache:
   assertEquals(error.meta.sessionType, 'anonymous')
   assertEquals(error.meta.rateLimit, 2)
   assertEquals(error.meta.windowSeconds, 60)
-  assert(error.meta.sessionId.startsWith('anonymous-'))
+  assert(error.meta.sessionRef.startsWith('anonymous-'))
 
   await new Promise((resolve) => setTimeout(resolve, 2000))
   const { response: checkRetry } = await guard(context)
@@ -108,7 +115,9 @@ export const shouldFailDueLimitAnonymous = async (cache: 'cache:local' | 'cache:
   assert(retryAfter < 59 && retryAfter > 55)
 }
 
-export const shouldFailDueLimit = async (cache: 'cache:local' | 'cache:redis') => {
+export const shouldFailDueLimit = async (
+  cache: 'cache:local' | 'cache:redis',
+) => {
   await import('@zanix/datamaster/core') // load cache core
   // deno-lint-ignore no-explicit-any
   await ProgramModule.connectors.get<any>(cache).clear() // reset data
@@ -129,7 +138,7 @@ export const shouldFailDueLimit = async (cache: 'cache:local' | 'cache:redis') =
   assertEquals(error.meta.sessionType, 'user')
   assertEquals(error.meta.rateLimit, 3)
   assertEquals(error.meta.windowSeconds, 60)
-  assertEquals(error.meta.sessionId, 'my-id')
+  assertEquals(error.meta.sessionRef, 'my-id')
 }
 
 export const shouldLogError = async (cache: 'cache:local' | 'cache:redis') => {
@@ -169,7 +178,9 @@ export const shouldLogError = async (cache: 'cache:local' | 'cache:redis') => {
   errorLog.restore()
 }
 
-export const shouldResetLimit = async (cache: 'cache:local' | 'cache:redis') => {
+export const shouldResetLimit = async (
+  cache: 'cache:local' | 'cache:redis',
+) => {
   await import('@zanix/datamaster/core') // load cache core
   // deno-lint-ignore no-explicit-any
   await ProgramModule.connectors.get<any>(cache).clear() // reset data
@@ -179,7 +190,12 @@ export const shouldResetLimit = async (cache: 'cache:local' | 'cache:redis') => 
 
   const guard = rateLimitGuard({ windowSeconds: 2, app: 'test' })
 
-  await Promise.all([guard(context), guard(context), guard(context), guard(context)])
+  await Promise.all([
+    guard(context),
+    guard(context),
+    guard(context),
+    guard(context),
+  ])
   const { response } = await guard(context) //  limit exceeded with 4 attempts
   assert(response)
 

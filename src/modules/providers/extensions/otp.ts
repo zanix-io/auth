@@ -25,7 +25,10 @@ export function otp(this: ZanixAuthProvider): OtpFlow {
         })
       }
 
-      return generateSessionTokens(this.context, { subject: target, ...options })
+      return generateSessionTokens(this.context, {
+        subject: target,
+        ...options,
+      })
     },
   }
 }

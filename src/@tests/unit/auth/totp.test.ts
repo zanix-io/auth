@@ -42,8 +42,14 @@ Deno.test('getTOTPProvisioningUri() prefixes the label and adds issuer when give
 })
 
 Deno.test('generateTOTP() matches the RFC 6238 published test vectors', async () => {
-  assertEquals(await generateTOTP(RFC_SECRET, { time: 59, digits: 8 }), '94287082')
-  assertEquals(await generateTOTP(RFC_SECRET, { time: 1111111109, digits: 8 }), '07081804')
+  assertEquals(
+    await generateTOTP(RFC_SECRET, { time: 59, digits: 8 }),
+    '94287082',
+  )
+  assertEquals(
+    await generateTOTP(RFC_SECRET, { time: 1111111109, digits: 8 }),
+    '07081804',
+  )
 })
 
 Deno.test('generateTOTP() defaults to a 6-digit code (last 6 of the 8-digit vector)', async () => {

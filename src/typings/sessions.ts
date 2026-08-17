@@ -39,7 +39,12 @@ export type CheckRateLimitResult = {
  * - **blocked**: The session has been blocked, usually due to security policies or rate limiting.
  * - **revoked**: The session was revoked or added to the blocklist.
  */
-export type SessionStatus = 'active' | 'failed' | 'unconfirmed' | 'blocked' | 'revoked'
+export type SessionStatus =
+  | 'active'
+  | 'failed'
+  | 'unconfirmed'
+  | 'blocked'
+  | 'revoked'
 
 /**
  * Session types.
@@ -95,7 +100,9 @@ export type AppTokenOptions<T extends SessionTypes> = {
   /**
    * The JWT data payload.
    */
-  payload?: Omit<Partial<JWTPayload>, 'sub' | 'exp' | 'jit'> & AppTokenBaseAccess
+  payload?:
+    & Omit<Partial<JWTPayload>, 'sub' | 'exp' | 'jit'>
+    & AppTokenBaseAccess
 
   /**
    * Session types.

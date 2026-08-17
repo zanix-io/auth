@@ -38,6 +38,8 @@ import { permissionsPipe } from '../permissions.pipe.ts'
  * }
  * ```
  */
-export function RequirePermissions(permissions: string[]): ZanixGenericDecorator {
+export function RequirePermissions(
+  permissions: string[],
+): ZanixGenericDecorator {
   return defineMiddlewareDecorator('pipe', permissionsPipe(permissions))
 }

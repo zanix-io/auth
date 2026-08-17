@@ -80,7 +80,9 @@ const credential = await exchangeServiceCredential(assertion)
 other `type: 'api'` session:
 
 ```ts
-fetch(url, { headers: { 'X-Znx-Authorization': `Bearer ${credential.accessToken}` } })
+fetch(url, {
+  headers: { 'X-Znx-Authorization': `Bearer ${credential.accessToken}` },
+})
 ```
 
 ---

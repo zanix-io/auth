@@ -14,7 +14,9 @@ import { Connector } from '@zanix/server'
 const registerConnector = () => {
   if (!Deno.env.has('GOOGLE_OAUTH2_CLIENT_ID')) return
 
-  Connector({ startMode: 'lazy', autoInitialize: false })(GoogleOAuth2Connector)
+  Connector({ startMode: 'lazy', autoInitialize: false })(
+    GoogleOAuth2Connector,
+  )
 }
 
 /**

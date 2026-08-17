@@ -42,6 +42,8 @@ import { rateLimitGuard } from '../rate-limit.guard.ts'
  * }
  * ```
  */
-export function RateLimitGuard(options: RateLimitsOptions): ZanixGenericDecorator {
+export function RateLimitGuard(
+  options: RateLimitsOptions,
+): ZanixGenericDecorator {
   return defineMiddlewareDecorator('guard', rateLimitGuard(options))
 }

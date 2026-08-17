@@ -106,7 +106,10 @@ Deno.test({
     Deno.env.set(`JWK_PRI_${SERVICE_ID}_key2`, btoa(privateKey))
 
     try {
-      const assertion = await createServiceAssertion({ serviceId: SERVICE_ID, keyId: 'key2' })
+      const assertion = await createServiceAssertion({
+        serviceId: SERVICE_ID,
+        keyId: 'key2',
+      })
       const { header } = decodeJWT(assertion)
       assertEquals(header.kid, 'key2')
     } finally {
@@ -197,8 +200,14 @@ Deno.test({
     Deno.env.set(`JWK_PRI_${SERVICE_ID}_v2`, 'suffixed-value')
 
     try {
-      assertEquals(resolveServiceAssertionPrivateKey(SERVICE_ID, SERVICE_ID), 'bare-value')
-      assertEquals(resolveServiceAssertionPrivateKey(SERVICE_ID, 'v2'), 'suffixed-value')
+      assertEquals(
+        resolveServiceAssertionPrivateKey(SERVICE_ID, SERVICE_ID),
+        'bare-value',
+      )
+      assertEquals(
+        resolveServiceAssertionPrivateKey(SERVICE_ID, 'v2'),
+        'suffixed-value',
+      )
     } finally {
       Deno.env.delete(`JWK_PRI_${SERVICE_ID}`)
       Deno.env.delete(`JWK_PRI_${SERVICE_ID}_v2`)
@@ -258,7 +267,10 @@ Deno.test('exchangeServiceCredential: grants SERVICE_PERMISSIONS_<id> if set', a
   await withAuthSigningKey(async () => {
     const { privateKey, publicKey } = await generateRSAKeys()
     Deno.env.set(`JWK_PUB_${SERVICE_ID}`, btoa(publicKey))
-    Deno.env.set(`SERVICE_PERMISSIONS_${SERVICE_ID}`, ' triggers:read , triggers:write ')
+    Deno.env.set(
+      `SERVICE_PERMISSIONS_${SERVICE_ID}`,
+      ' triggers:read , triggers:write ',
+    )
 
     const assertion = await createServiceAssertion({
       serviceId: SERVICE_ID,
@@ -362,7 +374,10 @@ Deno.test('exchangeServiceCredential: rejects an assertion signed by the wrong k
     privateKey: btoa(wrongPrivateKey),
   })
 
-  await assertRejects(() => exchangeServiceCredential(assertion), PermissionDenied)
+  await assertRejects(
+    () => exchangeServiceCredential(assertion),
+    PermissionDenied,
+  )
 
   Deno.env.delete(`JWK_PUB_${SERVICE_ID}`)
 })
@@ -377,7 +392,10 @@ Deno.test('exchangeServiceCredential: rejects the wrong audience', async () => {
     { algorithm: 'RS256', keyID: SERVICE_ID },
   )
 
-  await assertRejects(() => exchangeServiceCredential(assertion), PermissionDenied)
+  await assertRejects(
+    () => exchangeServiceCredential(assertion),
+    PermissionDenied,
+  )
 
   Deno.env.delete(`JWK_PUB_${SERVICE_ID}`)
 })
@@ -404,10 +422,18 @@ Deno.test('exchangeServiceCredential: honors JWK_PRI rotation end to end', async
     const credential = await exchangeServiceCredential(assertion)
 
     const { header } = decodeJWT(credential.accessToken)
-    assertEquals(header.kid, 'V1', "minted token's kid must be the rotation version, not serviceId")
+    assertEquals(
+      header.kid,
+      'V1',
+      "minted token's kid must be the rotation version, not serviceId",
+    )
 
     const resolved = getSecretByToken(credential.accessToken, 'api')
-    assertEquals(atob(resolved), authKeys.publicKey, 'must resolve back to the matching JWK_PUB_V1')
+    assertEquals(
+      atob(resolved),
+      authKeys.publicKey,
+      'must resolve back to the matching JWK_PUB_V1',
+    )
   } finally {
     Deno.env.delete(`JWK_PUB_${SERVICE_ID}`)
     Deno.env.delete('JWK_PRI_V1')
@@ -428,7 +454,10 @@ Deno.test('exchangeServiceCredential: rejects an expired assertion', async () =>
 
   const realNow = Date.now
   Date.now = () => realNow() + 2_000
-  await assertRejects(() => exchangeServiceCredential(assertion), PermissionDenied)
+  await assertRejects(
+    () => exchangeServiceCredential(assertion),
+    PermissionDenied,
+  )
   Date.now = realNow
 
   Deno.env.delete(`JWK_PUB_${SERVICE_ID}`)
@@ -562,7 +591,10 @@ Deno.test('exchangeServiceCredential: rotating a key leaves minted tokens valid'
     // The access token minted BEFORE the rotation is untouched by it — it was signed with
     // `@zanix/auth`'s own JWK_PRI, never the service's own key, and still verifies normally.
     const secret = getSecretByToken(credential.accessToken, 'api')
-    assert(secret, 'the minted access token must still resolve a verification key after rotation')
+    assert(
+      secret,
+      'the minted access token must still resolve a verification key after rotation',
+    )
     const { payload } = decodeJWT(credential.accessToken)
     assertEquals(payload.sub, SERVICE_ID)
   })

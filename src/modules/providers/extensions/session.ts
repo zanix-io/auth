@@ -9,7 +9,10 @@ export function session(this: ZanixAuthProvider): SessionFlow {
   return {
     generateTokens: (options: AuthSessionOptions) => generateSessionTokens(this.context, options),
     refreshTokens: (token?: string) =>
-      refreshSessionTokens(this.context, token, { cache: this.cache, kvDb: this.kvLocal }),
+      refreshSessionTokens(this.context, token, {
+        cache: this.cache,
+        kvDb: this.kvLocal,
+      }),
     revokeToken: (token?: string) =>
       revokeSessionToken(this.context, {
         cache: this.cache,

@@ -6,12 +6,16 @@ function createHeaders(values: Record<string, string>) {
 }
 
 Deno.test('getAnonymousSessionId uses the x-forwarded-for IP when well-formed', async () => {
-  const id = await getAnonymousSessionId(createHeaders({ 'x-forwarded-for': '203.0.113.5' }))
+  const id = await getAnonymousSessionId(
+    createHeaders({ 'x-forwarded-for': '203.0.113.5' }),
+  )
   assertMatch(id, /^anonymous-/)
 })
 
 Deno.test('getAnonymousSessionId falls back to invalid-ip on a malformed IP', async () => {
-  const id = await getAnonymousSessionId(createHeaders({ 'x-forwarded-for': 'not-an-ip-address' }))
+  const id = await getAnonymousSessionId(
+    createHeaders({ 'x-forwarded-for': 'not-an-ip-address' }),
+  )
   assert(id.startsWith('anonymous-'))
 })
 

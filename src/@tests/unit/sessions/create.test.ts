@@ -32,12 +32,19 @@ Deno.test('Create access token with correct local session', async () => {
 })
 
 Deno.test('Create session token shoud return correct refresn and access', async () => {
-  const tokens = await generateSessionTokens({ locals: {} } as never, {} as never)
+  const tokens = await generateSessionTokens(
+    { locals: {} } as never,
+    {} as never,
+  )
 
   const refresh = decodeJWT(tokens.refreshToken)
   assert(refresh.payload.exp)
   assertEquals(31536000, parseTTL('1y'))
-  assertAlmostEquals(refresh.payload.exp, Math.floor(Date.now() / 1000) + parseTTL('1y'), 10)
+  assertAlmostEquals(
+    refresh.payload.exp,
+    Math.floor(Date.now() / 1000) + parseTTL('1y'),
+    10,
+  )
 })
 
 Deno.test('generateSessionTokens forwards a provided id as the access token jit', async () => {
@@ -93,7 +100,12 @@ Deno.test('createAppToken throws InternalError when the signing key is missing',
   Deno.env.delete('JWT_KEY')
 
   await assertRejects(
-    () => createAppToken({ subject: 'user@example.com', type: 'user', expiration: 10 }),
+    () =>
+      createAppToken({
+        subject: 'user@example.com',
+        type: 'user',
+        expiration: 10,
+      }),
     InternalError,
   )
 })

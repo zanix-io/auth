@@ -247,7 +247,9 @@ export type OAuthFlow<U> = {
    *
    * @returns The generated OAuth URL along with the `state` used to build it.
    */
-  generateAuthUrl: (options?: { state?: string; scope?: string }) => { url: string; state: string }
+  generateAuthUrl: (
+    options?: { state?: string; scope?: string },
+  ) => { url: string; state: string }
   /**
    * Verifies a OAuth token and retrieves the associated user information.
    *

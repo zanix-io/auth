@@ -7,6 +7,23 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-17
+
+### Added
+
+- `DEFAULT_AUTH_ISSUER` — now exported from `mod.ts` alongside `createJWT`/`verifyJWT`/`decodeJWT`.
+  Lets a consumer verifying a token this package minted (`type: 'api'` service tokens included)
+  reference the same default `iss` this package's own `verifyJWT` calls already assume, instead of
+  hardcoding the literal string.
+- `ServiceAuthClientOptions.httpClient` (`createServiceAuthClient`) — an optional `Deno.HttpClient`
+  every exchange call from the returned function is issued through, passed straight to
+  `RestClient`'s own new `client` option (see `@zanix/server`'s changelog). Lets a caller present a
+  client certificate on the exchange call itself, not only on whatever request it makes afterward
+  with the returned headers — needed against a target that enforces mTLS on the WHOLE connection
+  (exchange included), since `requestCert`/`rejectUnauthorized` are negotiated once per TLS
+  connection, not per HTTP request. Omit for the previous behavior (a plain `RestClient`,
+  unchanged).
+
 ## [0.6.1] - 2026-08-04
 
 ### Fixed
