@@ -2,6 +2,14 @@ import type { CheckRateLimitResult } from 'typings/sessions.ts'
 import type { ZanixCacheProvider } from '@zanix/server'
 
 import { RATE_LIMIT } from 'utils/lua.ts'
+import { REDIS_URI_ENV } from 'utils/constants.ts'
+
+/**
+ * Env var defining rate-limit plans as `'index:maxRequests'` pairs (e.g.
+ * `'0:100;1:1000;2:3000'`) — see {@link getRateLimitForSession}'s own doc for how a session's
+ * `rateLimit` value resolves against it.
+ */
+export const RATE_LIMIT_PLANS_ENV = 'RATE_LIMIT_PLANS'
 
 let rateLimitPlanMap: Map<number, number>
 
@@ -32,7 +40,7 @@ export async function checkRateLimit(cache: ZanixCacheProvider, options: {
   const { key, maxRequests, windowSeconds, maxFaildedAttempts = 3 } = options
   const failedAttemptsKey = `${key}:failed-attempts`
 
-  if (Deno.env.get('REDIS_URI')) {
+  if (Deno.env.get(REDIS_URI_ENV)) {
     const client = await cache.redis.getClient()
 
     const now = Math.floor(Date.now() / 1000)
@@ -114,13 +122,13 @@ export async function checkRateLimit(cache: ZanixCacheProvider, options: {
  */
 export function getRateLimitForSession(sessionRateLimit: number): number {
   if (!rateLimitPlanMap) {
-    const RATE_LIMIT_PLANS = Deno.env.get('RATE_LIMIT_PLANS')
+    const ratePlans = Deno.env.get(RATE_LIMIT_PLANS_ENV)
     // If RATE_LIMIT_PLANS is not defined, return session.rateLimit directly
-    if (!RATE_LIMIT_PLANS) return sessionRateLimit
+    if (!ratePlans) return sessionRateLimit
 
     // Parse RATE_LIMIT_PLANS only if it is defined
     rateLimitPlanMap = new Map(
-      RATE_LIMIT_PLANS.split(';').map((plan) => {
+      ratePlans.split(';').map((plan) => {
         const [index, maxRequests] = plan.split(':')
         return [parseInt(index, 10), parseInt(maxRequests, 10)]
       }),

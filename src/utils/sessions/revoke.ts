@@ -7,9 +7,10 @@ import {
   type ZanixCacheProvider,
   type ZanixKVConnector,
 } from '@zanix/server'
-import { addTokenToBlockList } from 'utils/sessions/block-list.ts'
+import { addTokenToBlockListBase } from 'utils/sessions/block-list.ts'
 import { defineLocalSession } from 'utils/sessions/context.ts'
 import { invalidRefreshTokenError } from './errors.ts'
+import { toJwtHttpError } from 'utils/jwt/verification-error.ts'
 
 /**
  * Revokes one or multiple app token to the block list.
@@ -22,15 +23,18 @@ import { invalidRefreshTokenError } from './errors.ts'
  * @param {ZanixKVConnector} [kvDb] - Key-value store connector.
  * @returns {Promise<JWTPayload[]>} A promise that resolves with each revoked token's decoded payload.
  *
+ * @throws {PermissionDenied} If any of the given tokens is malformed — `addTokenToBlockListBase`
+ * decodes each one to read its `jti`/`exp` before recording it.
+ *
  * @example
  * // Revoke a single token
- * await revokeAppTokens("abc123token", cache)
+ * await revokeAppTokensBase("abc123token", cache)
  *
  * @example
  * // Revoke multiple tokens
- * await revokeAppTokens(["token1", "token2", "token3"], cache)
+ * await revokeAppTokensBase(["token1", "token2", "token3"], cache)
  */
-export const revokeAppTokens = (
+export const revokeAppTokensBase = (
   tokenInfo: string | string[],
   cache: ZanixCacheProvider,
   kvDb?: ZanixKVConnector,
@@ -39,8 +43,29 @@ export const revokeAppTokens = (
 
   const tokens = Array.isArray(tokenInfo) ? tokenInfo : [tokenInfo]
   return Promise.all(
-    tokens.map((token) => addTokenToBlockList(token, cache, kvDb)),
+    tokens.map((token) => addTokenToBlockListBase(token, cache, kvDb)),
   )
+}
+
+/**
+ * The real, exported entry point — {@link revokeAppTokensBase}, wrapped so a malformed token
+ * reaches a caller as `HttpError('BAD_REQUEST')` (the token you asked to revoke isn't valid to
+ * begin with) instead of falling through to `@zanix/server`'s generic 500 default for the bare
+ * `PermissionDenied` `addTokenToBlockListBase`'s own `decodeJWT` call throws (see `toJwtHttpError`'s
+ * own doc). `revokeAppTokensBase` stays the one place tested against the raw, unwrapped contract;
+ * reach for it directly only from a non-HTTP context that wants the bare `PermissionDenied`
+ * instead.
+ */
+export const revokeAppTokens = async (
+  tokenInfo: string | string[],
+  cache: ZanixCacheProvider,
+  kvDb?: ZanixKVConnector,
+): Promise<JWTPayload[]> => {
+  try {
+    return await revokeAppTokensBase(tokenInfo, cache, kvDb)
+  } catch (e) {
+    toJwtHttpError(e, 'BAD_REQUEST')
+  }
 }
 
 /**
@@ -68,7 +93,7 @@ export const revokeAppTokens = (
  *   sessionType: "user",
  * });
  */
-export const revokeSessionToken = async (
+export const revokeSessionTokenBase = async (
   ctx: ScopedContext,
   options: {
     token?: string
@@ -90,7 +115,7 @@ export const revokeSessionToken = async (
   const tokens = [currentRefreshToken]
   if (ctx.session?.token) tokens.push(ctx.session.token)
 
-  const [payload] = await revokeAppTokens(tokens, cache, kvDb)
+  const [payload] = await revokeAppTokensBase(tokens, cache, kvDb)
   defineLocalSession(ctx, {
     payload: { ...payload, exp: 0 },
     type: sessionType,
@@ -98,4 +123,29 @@ export const revokeSessionToken = async (
   })
 
   return payload
+}
+
+/**
+ * The real, exported entry point — {@link revokeSessionTokenBase}, wrapped the same way
+ * {@link revokeAppTokens} wraps {@link revokeAppTokensBase}: a malformed token reaches a caller as
+ * `HttpError('BAD_REQUEST')` instead of `@zanix/server`'s generic 500 default. Every other case
+ * (`invalidRefreshTokenError`) is already an `HttpError` and passes through unchanged — only a
+ * bare `PermissionDenied` gets normalized here. `revokeSessionTokenBase` stays the one place
+ * tested against the raw, unwrapped contract; `ZanixAuthProvider`'s own `session.revokeToken()`
+ * calls THIS wrapper.
+ */
+export const revokeSessionToken = async (
+  ctx: ScopedContext,
+  options: {
+    token?: string
+    cache: ZanixCacheProvider
+    kvDb?: ZanixKVConnector
+    sessionType?: SessionTypes
+  },
+): Promise<JWTPayload> => {
+  try {
+    return await revokeSessionTokenBase(ctx, options)
+  } catch (e) {
+    toJwtHttpError(e, 'BAD_REQUEST')
+  }
 }

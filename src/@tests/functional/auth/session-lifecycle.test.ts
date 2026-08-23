@@ -6,7 +6,7 @@ import {
   type ZanixCacheProvider,
   type ZanixKVConnector,
 } from '@zanix/server'
-import { PermissionDenied } from '@zanix/errors'
+import { HttpError } from '@zanix/errors'
 
 import { generateSessionTokens } from 'utils/sessions/create.ts'
 import { refreshSessionTokens } from 'utils/sessions/refresh.ts'
@@ -124,16 +124,20 @@ Deno.test({
     )
     assert(isBlocked, 'the revoked refresh token should be blocklisted')
 
-    // A subsequent refresh attempt with the revoked token must be rejected.
+    // A subsequent refresh attempt with the revoked token must be rejected — `HttpError`, not a
+    // bare `PermissionDenied`: `refreshSessionTokens` is the real, exported entry point a
+    // consuming app calls directly from its own HTTP route, so it wraps `refreshSessionTokensBase`
+    // for exactly this reason (see that function's own doc).
     const postRevokeCtx = contextMock()
-    await assertRejects(
+    const error = await assertRejects(
       () =>
         refreshSessionTokens(postRevokeCtx, refreshed.refreshToken, {
           cache,
           kvDb,
         }),
-      PermissionDenied,
+      HttpError,
     )
+    assertEquals(error.status.value, 401)
 
     Deno.env.delete('JWT_KEY')
     Deno.env.delete('REDIS_URI')

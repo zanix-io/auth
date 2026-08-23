@@ -1,9 +1,15 @@
 import type { JWTPayload } from './jwt.ts'
+import type { ProxyTrustOptions } from '@zanix/helpers'
 
 /**
- * The rate limit configuration options.
+ * The rate limit configuration options. `trustProxyHeader`/`trustedHeaders` are `@zanix/helpers`'s
+ * shared {@linkcode ProxyTrustOptions} contract — see that type's own doc for the general shape;
+ * this option's own doc below covers what happens HERE specifically when it's `false` (one shared
+ * anonymous bucket, same as `AnonymousSessionOptions`' own resolution) vs. left unset (a
+ * construction-time throw — `rateLimitGuard` requires an explicit decision, same as
+ * `ipAllowlistGuard` does for this identical class of decision).
  */
-export type RateLimitsOptions = {
+export type RateLimitsOptions = ProxyTrustOptions & {
   /**
    * The optional duration of the time window in seconds during which requests are counted.
    * Defaults to `60s`.
@@ -21,6 +27,29 @@ export type RateLimitsOptions = {
    * - If defined, it only applies to the specified app.
    */
   app?: string
+  // Redeclares `ProxyTrustOptions.trustProxyHeader` (same `boolean | undefined` type — this does
+  // NOT change what's accepted) purely so hovering it on `RateLimitsOptions` specifically shows
+  // THIS doc instead of `ProxyTrustOptions`'s generic one. `trustedHeaders` is deliberately NOT
+  // redeclared below: "headers considered trustworthy" means the same thing in every consumer, so
+  // the shared doc is already the right one.
+  /**
+   * Required (no default) whenever anonymous access is enabled (`anonymousLimit` isn't `false`/
+   * `0`) — must be explicitly `true` or `false`, never left unset:
+   * - `true`: each anonymous request's rate-limit bucket is keyed off its resolved client IP
+   *   (`x-forwarded-for`/`cf-connecting-ip`/`x-real-ip`) — only meaningful if your own
+   *   infrastructure guarantees a trusted proxy overwrites those headers before they reach this
+   *   process; otherwise a client can mint unlimited distinct buckets by spoofing them.
+   * - `false`: every anonymous request shares ONE rate-limit bucket instead — a deliberate,
+   *   explicit trade-off for deployments that can't guarantee a trusted proxy: closes the
+   *   spoofing bypass, at the cost of one abusive (or just busy) anonymous client being able to
+   *   exhaust the shared quota for every other anonymous client too.
+   * - unset: `rateLimitGuard` throws at construction time (when the guard is built, not on the
+   *   first request) rather than picking either behavior silently.
+   *
+   * Same contract `ipAllowlistGuard`'s own `trustProxyHeader` already established for this exact
+   * class of decision — see that guard's doc.
+   */
+  trustProxyHeader?: boolean
 }
 
 export type CheckRateLimitResult = {

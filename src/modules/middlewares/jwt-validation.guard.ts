@@ -6,6 +6,7 @@ import { AUTH_HEADERS, httpErrorResponse, type MiddlewareGlobalGuard } from '@za
 import { checkTokenBlockList } from 'utils/sessions/block-list.ts'
 import { defineLocalSession } from 'utils/sessions/context.ts'
 import { HttpError, PermissionDenied } from '@zanix/errors'
+import { isJwtVerificationFailure } from 'utils/jwt/verification-error.ts'
 import { rateLimitGuard } from './rate-limit.guard.ts'
 
 import { getSecretByToken } from 'utils/jwt/secrets.ts'
@@ -56,7 +57,13 @@ import {
  * this guard builds a failure response via `getDefaultSessionHeaders`, which includes:
  *
  * - `x-znx-<type>-session-status:<SessionStatus}>` to indicate the session status.
- * - `x-znx-<type>-id` Subject Id header, when a client subject can be resolved.
+ * - `x-znx-<type>-id` Subject Id header, when a client subject can be resolved from
+ *   `cookies`/`headers` — falling back to a shared anonymous identity otherwise
+ *   (`getDefaultSessionHeaders` is always called here with `trustProxyHeader: false`: this
+ *   identity only ever labels an already-rejected response, it never keys a shared,
+ *   capacity-limited resource the way `rateLimitGuard`'s own anonymous bucket does, so there's no
+ *   trade-off to expose as a `jwtValidationGuard` option of its own — see `docs/configuration.md`'s
+ *   `trustProxyHeader` section for the general contract this follows).
  * - If `X-Znx-Cookies-Accepted: true` is present (in headers or cookies), the same
  *   session status/subject/cookie-consent cookies are sent via `Set-Cookie`.
  *
@@ -171,6 +178,14 @@ export const jwtValidationGuard = (
       cookiesAccepted,
       headers: ctxHeaders,
       cookies,
+      // `getDefaultSessionHeaders` only actually needs this when it falls back to an anonymous
+      // session id (no client subject resolvable) — always the case here, since every call below
+      // builds a REJECTED-request response (missing/invalid token, blocklisted, rate-limited).
+      // Hardcoded `false` (shared id), not exposed as its own `jwtValidationGuard` option: unlike
+      // `rateLimitGuard`'s bucket, this id never gates or scopes a limited resource for a
+      // successful request — it's purely an informational label on an already-failed response, so
+      // there's no shared-fate/DoS trade-off to expose here the way there is for rate limiting.
+      trustProxyHeader: false,
     }
     const clientSubject = getClientSubject(ctxHeaders, cookies, type)
 
@@ -194,6 +209,8 @@ export const jwtValidationGuard = (
             authHeaderKey: authHeaderKey,
             requestId: ctx.id,
           },
+          exposeMeta: true,
+          exposeCause: true,
         }),
         { headers: baseHeaders, contextId: ctx.id },
       )
@@ -212,7 +229,13 @@ export const jwtValidationGuard = (
           ...defaultSessionOpts,
           sessionStatus: 'failed',
         })
-        if (e instanceof PermissionDenied) throw e
+        // Re-thrown (forcing the outer catch's blanket `FORBIDDEN`, not this token's own status):
+        // a JWT verification failure (see `isJwtVerificationFailure`'s own doc) means "this
+        // credential itself is bad," the same signature/shape-failure outcome this guard's `api`
+        // path always reports as `403`, regardless of which lower-level status the underlying
+        // check happens to carry. Any OTHER error from `getSecretByToken` (e.g. a missing signing
+        // key) is a real server-side fault, reported with its own status below, unchanged.
+        if (isJwtVerificationFailure(e)) throw e
 
         const response = httpErrorResponse(e, {
           headers: baseHeaders,
@@ -297,6 +320,8 @@ export const jwtValidationGuard = (
             source: 'zanix',
             method: 'verifyJWT',
           },
+          exposeMeta: true,
+          exposeCause: true,
         }),
         { headers: baseHeaders, contextId: ctx.id },
       )

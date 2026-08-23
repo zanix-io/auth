@@ -69,7 +69,7 @@ Deno.test({
   fn: async () => {
     const context = await initialize()
 
-    const token = await createJWT({}, 'my-secret')
+    const token = await createJWT({}, 'my-secret', { expiration: '1h' })
     context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 
     const { response } = await jwtValidationGuard({ rateLimit: false })(
@@ -104,7 +104,7 @@ Deno.test({
   fn: async () => {
     const context = await initialize()
 
-    const token = await createJWT({}, 'my-secret')
+    const token = await createJWT({}, 'my-secret', { expiration: '1h' })
     context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 
     context.cookies = {
@@ -115,9 +115,9 @@ Deno.test({
     assert(response)
 
     assertArrayIncludes(response.headers.getSetCookie(), [
-      'X-Znx-User-Session-Status=failed; Max-Age=0; Path=/; HttpOnly; SameSite=Strict',
-      'X-Znx-Cookies-Accepted=true; Max-Age=0; Path=/; HttpOnly; SameSite=Strict',
-      'X-Znx-App-Token=undefined; Max-Age=0; Path=/; HttpOnly; SameSite=Strict',
+      'X-Znx-User-Session-Status=failed; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict',
+      'X-Znx-Cookies-Accepted=true; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict',
+      'X-Znx-App-Token=undefined; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict',
     ])
 
     const error = await response.json()
@@ -138,6 +138,7 @@ Deno.test({
     const token = await createJWT(
       { rateLimit: 2, sub: 'my-user-id' },
       'my-secret',
+      { expiration: '1h' },
     )
     context.req.headers.get = (name) =>
       name === 'Authorization'
@@ -174,7 +175,7 @@ Deno.test({
 
     const { publicKey, privateKey } = await generateRSAKeys()
 
-    const token = await createJWT({}, privateKey, { algorithm: 'RS256' })
+    const token = await createJWT({}, privateKey, { algorithm: 'RS256', expiration: '1h' })
 
     context.req.headers.get = (name) => name === 'X-Znx-Authorization' ? `Bearer ${token}` : null
 
@@ -207,7 +208,7 @@ Deno.test({
   fn: async () => {
     const context = await initialize()
 
-    const token = await createJWT({}, 'my-secret', { algorithm: 'HS512' })
+    const token = await createJWT({}, 'my-secret', { algorithm: 'HS512', expiration: '1h' })
 
     context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 

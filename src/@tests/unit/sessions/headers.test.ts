@@ -1,10 +1,13 @@
-import { assert, assertEquals, assertFalse, assertMatch } from '@std/assert'
+import { assert, assertEquals, assertFalse, assertMatch, assertRejects } from '@std/assert'
 import {
   checkAcceptedCookies,
   getDefaultSessionHeaders,
   getSessionHeaders,
 } from 'utils/sessions/headers.ts'
 import { createJWT } from 'utils/jwt/create.ts'
+import { InternalError } from '@zanix/errors'
+
+console.error = () => {}
 
 Deno.test('getSessionHeaders returns default headers without cookies', () => {
   const { 'Set-Cookie': cookies, ...headers } = getSessionHeaders({
@@ -37,12 +40,33 @@ Deno.test('getSessionHeaders includes cookies when requested', () => {
   assertMatch(cookies[0], /Max-Age=3600/)
   assertMatch(
     cookies[0],
-    /X-Znx-User-Session-Status=active; Max-Age=\d+; Path=\/; HttpOnly; SameSite=Strict/,
+    /X-Znx-User-Session-Status=active; Max-Age=\d+; Path=\/; HttpOnly; Secure; SameSite=Strict/,
   )
   assertMatch(
     cookies[1],
-    /X-Znx-User-Id=alice; Max-Age=\d+; Path=\/; HttpOnly; SameSite=Strict/,
+    /X-Znx-User-Id=alice; Max-Age=\d+; Path=\/; HttpOnly; Secure; SameSite=Strict/,
   )
+})
+
+/**
+ * Regression coverage for a confirmed vulnerability: every session/subject/cookie-consent/
+ * refresh-token cookie used to be built without `Secure`, so a browser would still attach it over
+ * a plain-HTTP connection.
+ */
+Deno.test('getSessionHeaders: every cookie it sets includes Secure', async () => {
+  const refreshToken = await createJWT({}, 'my-secret', { expiration: '1y' })
+  const { 'Set-Cookie': cookies } = getSessionHeaders({
+    cookiesAccepted: true,
+    type: 'user',
+    subject: 'alice',
+    expiration: Math.floor(Date.now() / 1000) + 3600,
+    refreshToken,
+  })
+
+  assert(cookies.length >= 4) // status + subject + cookies-accepted + refresh token
+  for (const cookie of cookies) {
+    assertMatch(cookie, /; Secure(;|$)/)
+  }
 })
 
 Deno.test('getSessionHeaders derives the refresh cookie Max-Age from its own exp', async () => {
@@ -174,6 +198,7 @@ Deno.test(
         cookies: {},
         type: 'api',
         cookiesAccepted: false,
+        trustProxyHeader: false,
       },
     )
 
@@ -188,11 +213,48 @@ Deno.test(
         cookies: {},
         type: 'user',
         cookiesAccepted: false,
+        trustProxyHeader: false,
       },
     )
 
     assertEquals(userHeaders['X-Znx-User-Session-Status'], 'unconfirmed')
     assert(userHeaders['X-Znx-User-Id'].startsWith('anonymous-'))
+  },
+)
+
+/**
+ * Regression coverage for the gap this whole `trustProxyHeader` contract exists to close: before
+ * `getAnonymousSessionId` enforced it directly (rather than only `rateLimitGuard` doing so at
+ * construction time), `getDefaultSessionHeaders`'s own anonymous fallback silently defaulted to
+ * `false` — closing the spoofing bypass by accident, never by an explicit decision, and only for
+ * this one caller. Any caller reaching the fallback with no decision made must now throw.
+ */
+Deno.test(
+  'getDefaultSessionHeaders throws when it falls back to an anonymous session id without an explicit trustProxyHeader',
+  async () => {
+    await assertRejects(
+      () =>
+        getDefaultSessionHeaders({
+          headers: { get: () => null } as never,
+          cookies: {},
+          type: 'user',
+          cookiesAccepted: false,
+        }),
+      InternalError,
+    )
+  },
+)
+
+Deno.test(
+  'getDefaultSessionHeaders does not throw when a real client subject is resolved, even without trustProxyHeader',
+  async () => {
+    const { 'Set-Cookie': _, ...headers } = await getDefaultSessionHeaders({
+      headers: { get: () => null } as never,
+      cookies: { 'X-Znx-User-Id': 'my-user' },
+      type: 'user',
+      cookiesAccepted: false,
+    })
+    assert(headers['X-Znx-User-Id'].startsWith('my-user'))
   },
 )
 

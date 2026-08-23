@@ -2,6 +2,7 @@ import {
   shouldAllowDifferentLens,
   shouldGenerateAndExpire,
   shouldGenerateAndVerify,
+  shouldLockOutAfterMaxAttempts,
 } from './asserts.ts'
 
 Deno.test({
@@ -31,5 +32,15 @@ Deno.test({
   fn: async () => {
     Deno.env.set('REDIS_URI', 'redis://localhost:6379')
     await shouldAllowDifferentLens('redis')
+  },
+})
+
+Deno.test({
+  sanitizeOps: false,
+  sanitizeResources: false,
+  name: 'should lock out after maxAttempts wrong guesses',
+  fn: async () => {
+    Deno.env.set('REDIS_URI', 'redis://localhost:6379')
+    await shouldLockOutAfterMaxAttempts('redis')
   },
 })

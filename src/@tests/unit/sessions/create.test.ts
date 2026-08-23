@@ -99,7 +99,7 @@ Deno.test('createAppToken throws InternalError when the signing key is missing',
   jwtKeys.JWT_KEY.clear()
   Deno.env.delete('JWT_KEY')
 
-  await assertRejects(
+  const error = await assertRejects(
     () =>
       createAppToken({
         subject: 'user@example.com',
@@ -108,6 +108,7 @@ Deno.test('createAppToken throws InternalError when the signing key is missing',
       }),
     InternalError,
   )
+  assertEquals(error.code, 'AUTH_SESSION_JWT_KEY_MISSING')
 })
 
 Deno.test('createAppToken wraps signing failures in an HttpError', async () => {

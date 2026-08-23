@@ -37,9 +37,9 @@ Deno.test('jwtValidation shoud return an error wihout session', async () => {
 
   // deno-lint-ignore no-non-null-asserted-optional-chain no-non-null-assertion
   assertArrayIncludes(withCookies?.headers.getSetCookie()!, [
-    'X-Znx-User-Session-Status=failed; Max-Age=0; Path=/; HttpOnly; SameSite=Strict',
-    'X-Znx-Cookies-Accepted=true; Max-Age=0; Path=/; HttpOnly; SameSite=Strict',
-    'X-Znx-App-Token=undefined; Max-Age=0; Path=/; HttpOnly; SameSite=Strict',
+    'X-Znx-User-Session-Status=failed; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict',
+    'X-Znx-Cookies-Accepted=true; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict',
+    'X-Znx-App-Token=undefined; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict',
   ])
 })
 
@@ -158,7 +158,7 @@ Deno.test('jwtValidation shoud return an error due token expired', async () => {
 
 Deno.test('jwtValidation shoud return an error due token issuer', async () => {
   const context = contextMock()
-  const token = await createJWT({}, 'my-secret')
+  const token = await createJWT({}, 'my-secret', { expiration: '1h' })
   Deno.env.set('JWT_KEY', 'my-secret')
   context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 
@@ -177,7 +177,7 @@ Deno.test('jwtValidation shoud return an error due token issuer', async () => {
 
 Deno.test('jwtValidation shoud return an error due token permissions', async () => {
   const context = contextMock()
-  const token = await createJWT({}, 'my-secret')
+  const token = await createJWT({}, 'my-secret', { expiration: '1h' })
   Deno.env.set('JWT_KEY', 'my-secret')
   context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 
@@ -204,7 +204,7 @@ Deno.test('jwtValidation shoud return an error due token permissions', async () 
 
 Deno.test('jwtValidation shoud return an error due token subject', async () => {
   const context = contextMock()
-  const token = await createJWT({ sub: 'my-id', aud: 'admin' }, 'my-secret')
+  const token = await createJWT({ sub: 'my-id', aud: 'admin' }, 'my-secret', { expiration: '1h' })
   Deno.env.set('JWT_KEY', 'my-secret')
   context.req.headers.get = (name) =>
     name === 'Authorization' ? `Bearer ${token}` : name === 'X-Znx-User-Id' ? 'user-id' : null
@@ -256,7 +256,7 @@ const stubBlockListLookup = (context: ReturnType<typeof contextMock>) => {
 Deno.test('jwtValidation type array: picks user when only Authorization is sent', async () => {
   const context = contextMock()
   stubBlockListLookup(context)
-  const token = await createJWT({}, 'my-secret')
+  const token = await createJWT({}, 'my-secret', { expiration: '1h' })
   Deno.env.set('JWT_KEY', 'my-secret')
   context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 
@@ -277,7 +277,7 @@ Deno.test('jwtValidation type array: picks api when only X-Znx-Authorization is 
   const context = contextMock()
   stubBlockListLookup(context)
   const { privateKey, publicKey } = await generateRSAKeys()
-  const token = await createJWT({}, privateKey, { algorithm: 'RS256' })
+  const token = await createJWT({}, privateKey, { algorithm: 'RS256', expiration: '1h' })
   Deno.env.set('JWK_PUB', btoa(publicKey))
   context.req.headers.get = (name) => name === 'X-Znx-Authorization' ? `Bearer ${token}` : null
 

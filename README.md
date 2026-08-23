@@ -30,7 +30,7 @@ abuse protection via rate limiting.
 
 It provides a **unified and extensible system** for:
 
-- OAuth2 connectors (Google built in; extend `OAuth2Connector` for any other provider)
+- OAuth2 connectors (Google, GitHub built in; extend `OAuth2Connector` for any other provider)
 - TOTP authenticator-app 2FA (Google Authenticator, Microsoft Authenticator, etc.)
 - JWT generation and verification (HMAC and RSA with key rotation)
 - Session management (create, revoke, generate session headers)
@@ -50,20 +50,27 @@ It provides a **unified and extensible system** for:
 
 - **OAuth2 Connector**
   - `GoogleOAuth2Connector`: `generateAuthUrl()`, `getUserInfo()`/`validateToken()`,
-    `revokeToken()`, and a combined `authenticate()` that also creates the local session.
+    `revokeToken()`, `authenticate()`/`authenticateWithCode()` — both combined methods that also
+    create the local session; prefer `authenticateWithCode()` where the provider supports it, see
+    [Adding a Custom OAuth2 Provider](./docs/authentication-methods.md#-adding-a-custom-oauth2-provider)
+    for why.
   - Also available bound to the default provider: `this.providers.get('auth').google`.
-  - `OAuth2Connector`: the abstract base class `GoogleOAuth2Connector` itself extends — use it to
-    add a custom OAuth2 provider (GitHub, Microsoft, …) without reimplementing the flow. See
+  - `GitHubOAuth2Connector`: same shape as `GoogleOAuth2Connector`, bound to
+    `this.providers.get('auth').github` — but defaults to the authorization-code flow
+    (`responseType: 'code'`), since GitHub's own OAuth2 implementation has no implicit flow at all.
+    See [GitHub OAuth2](./docs/authentication-methods.md#-github-oauth2).
+  - `OAuth2Connector`: the abstract base class both extend — use it to add a custom OAuth2 provider
+    (Microsoft, Facebook, …) without reimplementing the flow. See
     [Adding a Custom OAuth2 Provider](./docs/authentication-methods.md#-adding-a-custom-oauth2-provider).
 
 - **Provider DSL**
   - A default `ZanixAuthProvider` is registered automatically under the `'auth'` core-provider key —
     `this.providers.get('auth')` works with zero setup, the same pattern `@zanix/asyncmq` uses for
     its `'worker'` provider.
-  - This registration (along with the default session headers interceptor, and the Google connector
-    when `GOOGLE_OAUTH2_CLIENT_ID` is set) is wired by importing `jsr:@zanix/auth/core` once — see
-    [Core Registration](#-core-registration). If your app already bootstraps via `@zanix/core`'s
-    `Zanix.start()`, this is handled for you.
+  - This registration (along with the default session headers interceptor, and the Google/GitHub
+    connectors when `GOOGLE_OAUTH2_CLIENT_ID`/`GITHUB_OAUTH2_CLIENT_ID` are set) is wired by
+    importing `jsr:@zanix/auth/core` once — see [Core Registration](#-core-registration). If your
+    app already bootstraps via `@zanix/core`'s `Zanix.start()`, this is handled for you.
   - The provider also exposes `.otp`, `.totp`, and `.session` (see below), bound to the current
     request context — no need to thread `ctx`/cache/connectors through the lower-level functions
     yourself.
@@ -128,6 +135,9 @@ It provides a **unified and extensible system** for:
   - `jwtValidationGuard`: validates JWT tokens in incoming requests.
   - `rateLimitGuard`: applies rate limiting.
   - `ipAllowlistGuard`: restricts access to configured IP addresses or CIDR ranges.
+  - `captchaGuard`: verifies a captcha response token (reCAPTCHA/hCaptcha/Turnstile) against a
+    third-party anti-bot provider. See
+    [Captcha (Anti-bot Verification)](./docs/configuration.md#-captcha-anti-bot-verification).
   - `permissionsPipe`: validates permissions before executing route logic.
 
 - **Decorators**
@@ -135,6 +145,7 @@ It provides a **unified and extensible system** for:
   - `RequirePermissions`: requires specific permissions or scopes.
   - `RateLimitGuard`: limits request rates at the method level.
   - `IpAllowlistGuard`: restricts controllers to configured IP addresses or CIDR ranges.
+  - `CaptchaGuard`: verifies a captcha response token before allowing access to a controller.
 
 ---
 
@@ -162,8 +173,9 @@ import { GoogleOAuth2Connector } from 'jsr:@zanix/auth@[version]'
 Importing `jsr:@zanix/auth` (the default entrypoint) only exposes its exported classes, functions,
 and types — it does **not** register anything with the Zanix framework by itself. To get the
 zero-config behavior described under [Provider DSL](#-features) (the default `ZanixAuthProvider`
-under `'auth'`, the session headers interceptor, and — when `GOOGLE_OAUTH2_CLIENT_ID` is set — a
-default `GoogleOAuth2Connector`), import the `./core` subpath once, anywhere it will run at startup:
+under `'auth'`, the session headers interceptor, and — when the matching
+`<PROVIDER>_OAUTH2_CLIENT_ID` is set — a default `GoogleOAuth2Connector`/`GitHubOAuth2Connector`),
+import the `./core` subpath once, anywhere it will run at startup:
 
 ```ts
 import 'jsr:@zanix/auth/core'
@@ -191,10 +203,13 @@ class LoginInteractor extends ZanixInteractor {
   public async auth() {
     const connector = this.providers.get('auth').google
 
-    const { code } = /* … obtain OAuth2 auth code … */
+    const { code } = /* … obtain the OAuth2 auth code from the redirect (?code=...) … */
     // `permissions` here becomes the session token's `aud` claim — see Permissions & Scopes
     // in the Authentication Methods guide (docs/authentication-methods.md).
-    const { user, session } = await connector.authenticate(code, { permissions: ['admin'] })
+    // `authenticateWithCode` exchanges `code` for a real token server-side — the token it hands
+    // off is provably scoped to THIS app by construction, unlike a token received directly from
+    // the client. See the Authentication Methods guide for why this beats `.authenticate(token)`.
+    const { user, session } = await connector.authenticateWithCode(code, { permissions: ['admin'] })
 
     // For security reasons, never expose Google OAuth tokens or refresh tokens to the frontend.
     // These tokens must always remain server-side.
@@ -214,10 +229,11 @@ class SecureInteractor extends ZanixInteractor {
 
 ## 🔐 Authentication Methods
 
-Beyond the Google OAuth2 flow shown above, `@zanix/auth` also supports adding custom OAuth2
-providers (GitHub, Microsoft, …), OTP (one-time password) delivery over email/SMS, and TOTP
-authenticator-app 2FA — plus how `permissions`/scopes are checked across all of them. Use these when
-Google isn't your only identity provider, or when you need a second authentication factor.
+Beyond the Google OAuth2 flow shown above, `@zanix/auth` also ships a built-in GitHub OAuth2
+connector, supports adding custom OAuth2 providers beyond those two (Microsoft, Facebook, …), OTP
+(one-time password) delivery over email/SMS, and TOTP authenticator-app 2FA — plus how
+`permissions`/scopes are checked across all of them. Use these when Google isn't your only identity
+provider, or when you need a second authentication factor.
 
 See the [Authentication Methods Guide](./docs/authentication-methods.md) for flows, examples, and
 security considerations for each.

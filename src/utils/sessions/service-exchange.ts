@@ -1,13 +1,19 @@
 import { HttpError, InternalError, PermissionDenied } from '@zanix/errors'
 import { parseTTL } from '@zanix/helpers'
 import {
+  JWK_ID_ENV,
+  JWK_PRI_ENV,
+  JWK_PUB_ENV,
   SERVICE_ASSERTION_DEFAULT_EXP,
   SERVICE_EXCHANGE_AUDIENCE,
+  SERVICE_PERMISSIONS_ENV,
+  SERVICE_RATE_LIMIT_ENV,
   SERVICE_TOKEN_DEFAULT_EXP,
 } from 'utils/constants.ts'
 import { createJWT } from 'utils/jwt/create.ts'
 import { decodeJWT } from 'utils/jwt/decode.ts'
 import { verifyJWT } from 'utils/jwt/verify.ts'
+import { toJwtHttpError } from 'utils/jwt/verification-error.ts'
 import { createAppToken } from './create.ts'
 
 /**
@@ -120,7 +126,7 @@ export const createServiceAssertion = async (options: {
  * threaded through by hand.
  */
 export function resolveServiceAssertionKeyId(serviceId: string): string {
-  return Deno.env.get(`JWK_ID_${serviceId}`) || serviceId
+  return Deno.env.get(`${JWK_ID_ENV}_${serviceId}`) || serviceId
 }
 
 /**
@@ -138,7 +144,9 @@ export function resolveServiceAssertionPrivateKey(
   serviceId: string,
   keyId: string,
 ): string {
-  const keyName = keyId === serviceId ? `JWK_PRI_${serviceId}` : `JWK_PRI_${serviceId}_${keyId}`
+  const keyName = keyId === serviceId
+    ? `${JWK_PRI_ENV}_${serviceId}`
+    : `${JWK_PRI_ENV}_${serviceId}_${keyId}`
   const secret = Deno.env.get(keyName)
 
   if (secret) return secret
@@ -147,6 +155,7 @@ export function resolveServiceAssertionPrivateKey(
     `Missing private key to sign a service assertion for "${serviceId}" — register ` +
       `"${keyName}", or pass "privateKey" explicitly to createServiceAssertion().`,
     {
+      code: 'AUTH_SERVICE_ASSERTION_PRIVATE_KEY_MISSING',
       meta: {
         source: 'zanix',
         method: 'createServiceAssertion',
@@ -179,7 +188,9 @@ export type ServiceCredential = {
  * @throws {HttpError} If nothing is registered under the resolved env var name.
  */
 function resolveServiceAssertionKey(serviceId: string, keyId: string): string {
-  const keyName = keyId === serviceId ? `JWK_PUB_${serviceId}` : `JWK_PUB_${serviceId}_${keyId}`
+  const keyName = keyId === serviceId
+    ? `${JWK_PUB_ENV}_${serviceId}`
+    : `${JWK_PUB_ENV}_${serviceId}_${keyId}`
   const secret = Deno.env.get(keyName)
 
   if (secret) return secret
@@ -261,7 +272,8 @@ function resolveServiceAssertionKey(serviceId: string, keyId: string): string {
  * @throws {PermissionDenied} If the assertion is malformed, missing a `kid`/`iss`, has a `sub` that
  * doesn't match its own `iss`, has an invalid signature, is expired, or targets the wrong `aud`.
  * @throws {HttpError} If no matching `JWK_PUB_<serviceId>`/`JWK_PUB_<serviceId>_<keyId>` is
- * configured for the claimed service/key — see {@link resolveServiceAssertionKey}.
+ * configured for the claimed service/key — see {@link resolveServiceAssertionKey}; also thrown
+ * (`'BAD_REQUEST'`) for any of the `PermissionDenied` cases above — see this function's own doc.
  *
  * @returns The minted {@link ServiceCredential}.
  *
@@ -273,7 +285,7 @@ function resolveServiceAssertionKey(serviceId: string, keyId: string): string {
  * }
  * ```
  */
-export const exchangeServiceCredential = async (
+export const exchangeServiceCredentialBase = async (
   assertion: string,
   options: { expiration?: number | string } = {},
 ): Promise<ServiceCredential> => {
@@ -301,12 +313,12 @@ export const exchangeServiceCredential = async (
     aud: SERVICE_EXCHANGE_AUDIENCE,
   })
 
-  const permissions = Deno.env.get(`SERVICE_PERMISSIONS_${serviceId}`)
+  const permissions = Deno.env.get(`${SERVICE_PERMISSIONS_ENV}_${serviceId}`)
     ?.split(',')
     .map((permission) => permission.trim())
     .filter(Boolean)
 
-  const rawRateLimit = Deno.env.get(`SERVICE_RATE_LIMIT_${serviceId}`)
+  const rawRateLimit = Deno.env.get(`${SERVICE_RATE_LIMIT_ENV}_${serviceId}`)
   const rateLimit = rawRateLimit ? Number(rawRateLimit) : undefined
 
   const expiration = options.expiration ?? SERVICE_TOKEN_DEFAULT_EXP
@@ -320,4 +332,27 @@ export const exchangeServiceCredential = async (
   })
 
   return { accessToken, expiresIn: parseTTL(expiration), serviceId }
+}
+
+/**
+ * The real, exported entry point — {@link exchangeServiceCredentialBase}, wrapped so every one of
+ * its own `PermissionDenied` cases (see that function's own `@throws`) reaches an HTTP caller as a
+ * real `HttpError('BAD_REQUEST', ...)` instead of `@zanix/server`'s generic 500 default (see
+ * `toJwtHttpError`'s own doc for why a bare `PermissionDenied` needs this at all). Every real
+ * consumer of this function (`@zanix/admin`'s `/admin/service-token`, `@zanix/app`'s
+ * `/__zanix-ops/{app}/service-token` and `/__zanix-mcp/service-token`) is an HTTP route handler
+ * wanting exactly this, which is why the wrapping lives HERE rather than in each of them —
+ * `exchangeServiceCredentialBase` stays the one place tested against the raw, unwrapped contract
+ * (`@zanix/auth`'s own unit suite), so a non-HTTP caller could still reach for it directly if one
+ * ever needed the bare `PermissionDenied` instead.
+ */
+export const exchangeServiceCredential = async (
+  assertion: string,
+  options: { expiration?: number | string } = {},
+): Promise<ServiceCredential> => {
+  try {
+    return await exchangeServiceCredentialBase(assertion, options)
+  } catch (e) {
+    toJwtHttpError(e, 'BAD_REQUEST')
+  }
 }

@@ -1,17 +1,18 @@
 # Authentication Methods
 
 Beyond the flagship Google OAuth2 example in the [README](../README.md#-basic-usage), `@zanix/auth`
-supports building custom OAuth2 providers, one-time-password (OTP) delivery over email/SMS, and TOTP
-authenticator-app 2FA — plus how permissions and scopes are checked across all of them. This guide
-covers all four.
+ships a second built-in OAuth2 provider (GitHub), supports building custom OAuth2 providers beyond
+those two, one-time-password (OTP) delivery over email/SMS, and TOTP authenticator-app 2FA — plus
+how permissions and scopes are checked across all of them. This guide covers all five.
 
 ## 🧭 Table of Contents
 
 1. [Permissions & Scopes](#-permissions--scopes)
 2. [Reading the Current Request's Access Token](#-reading-the-current-requests-access-token)
-3. [Adding a Custom OAuth2 Provider](#-adding-a-custom-oauth2-provider)
-4. [OTP (One-Time Password)](#-otp-one-time-password)
-5. [Two-Factor Authentication (TOTP)](#-two-factor-authentication-totp)
+3. [GitHub OAuth2](#-github-oauth2)
+4. [Adding a Custom OAuth2 Provider](#-adding-a-custom-oauth2-provider)
+5. [OTP (One-Time Password)](#-otp-one-time-password)
+6. [Two-Factor Authentication (TOTP)](#-two-factor-authentication-totp)
 
 ---
 
@@ -64,37 +65,118 @@ through `jwtValidationGuard` (no login/refresh in the same request) has `accessT
 
 ---
 
-## 🔌 Adding a Custom OAuth2 Provider
+## 🐙 GitHub OAuth2
 
-`GoogleOAuth2Connector` is itself a thin subclass of the exported `OAuth2Connector<TUserInfo>` base
-class. To support another provider, extend it directly — you only need to supply the endpoints, the
-default scope, and how to derive the session subject from that provider's user-info shape:
+`GitHubOAuth2Connector` is a second built-in provider alongside `GoogleOAuth2Connector` — same
+shape, same `this.providers.get('auth').github` access path — but it **defaults to the
+authorization-code flow (`responseType: 'code'`), unlike Google's implicit-flow default.** GitHub's
+own OAuth2 implementation has no implicit flow at all — its `/login/oauth/authorize` redirect always
+comes back with `?code=...`, never a bearer token directly — so `.authenticate()`/`.validateToken()`
+cannot work against real GitHub; only `.authenticateWithCode()`/`.validateCode()` do:
 
 ```ts
-import { OAuth2Connector, type OAuth2ConnectorOptions } from 'jsr:@zanix/auth@[version]'
+class LoginInteractor extends ZanixInteractor {
+  public async auth() {
+    const connector = this.providers.get('auth').github
 
-type GitHubUserInfo = { id: number; email: string }
+    const { code } = /* … obtain the OAuth2 auth code from the redirect (?code=...) … */
+    // `permissions` here becomes the session token's `aud` claim — see Permissions & Scopes above.
+    const { user, session } = await connector.authenticateWithCode(code, { permissions: ['admin'] })
 
-class GitHubOAuth2Connector extends OAuth2Connector<GitHubUserInfo> {
-  constructor(options: OAuth2ConnectorOptions = {}) {
-    super({
-      authUrl: 'https://github.com/login/oauth/authorize',
-      userInfoUrl: 'https://api.github.com/user',
-      revokeUrl: 'https://api.github.com/applications/{client_id}/token',
-      defaultScope: 'read:user user:email',
-    }, options)
-  }
-
-  protected getSubject(user: GitHubUserInfo): string {
-    return user.email
+    return session.accessToken
   }
 }
 ```
 
-`generateAuthUrl()`, `getUserInfo()`, `revokeToken()`, and `authenticate()` all come for free from
-the base class. `response_type` (`'token'`/`'code'`) and every endpoint URL/`defaultScope` can be
-overridden per-instance via the constructor's `options`, on top of the subclass's own defaults —
-useful for auth-code flows or pointing at a proxy/mock endpoint.
+GitHub's own `GET /user` response can return a `null` email for an account with a private email
+setting, even with the `user:email` scope granted, so `GitHubOAuth2Connector.getSubject()` derives
+the session subject from the account's immutable numeric `id` instead — unlike
+`GoogleOAuth2Connector`, whose `email` is always present. `GitHubOAuth2Connector` also overrides
+`revokeToken()`: GitHub's own token-revocation endpoint (`DELETE applications/{client_id}/token`,
+HTTP Basic auth with `clientId`/`clientSecret`, a JSON `{ access_token }` body) has a genuinely
+different shape from the base class's generic `POST`-with-form-body implementation Google's own
+revoke endpoint uses.
+
+Configured the same way as `GoogleOAuth2Connector` — `GITHUB_OAUTH2_CLIENT_ID`/
+`GITHUB_OAUTH2_CLIENT_SECRET`/`GITHUB_OAUTH2_REDIRECT_URI` plus the same set of `*_URL`/
+`GITHUB_OAUTH2_RESPONSE_TYPE` overrides — see the [Configuration Guide](./configuration.md).
+
+---
+
+## 🔌 Adding a Custom OAuth2 Provider
+
+`GoogleOAuth2Connector`/`GitHubOAuth2Connector` are both thin subclasses of the exported
+`OAuth2Connector<TUserInfo>` base class. To support a provider that isn't already one of those two,
+extend it directly — you only need to supply the endpoints, the default scope, and how to derive the
+session subject from that provider's user-info shape. The example below uses placeholder URLs;
+verify your provider's own real OAuth2 documentation before shipping — never assume a shape from a
+similar provider, since a wrong `tokenUrl`/`userInfoUrl` fails silently as an opaque HTTP error far
+from its actual cause:
+
+```ts
+import { OAuth2Connector, type OAuth2ConnectorOptions } from 'jsr:@zanix/auth@[version]'
+
+type ExampleUserInfo = { id: string; email: string }
+
+class ExampleOAuth2Connector extends OAuth2Connector<ExampleUserInfo> {
+  constructor(options: OAuth2ConnectorOptions = {}) {
+    super({
+      authUrl: 'https://provider.example.com/oauth2/authorize',
+      userInfoUrl: 'https://provider.example.com/oauth2/userinfo',
+      revokeUrl: 'https://provider.example.com/oauth2/revoke',
+      tokenUrl: 'https://provider.example.com/oauth2/token',
+      defaultScope: 'profile email',
+      responseType: 'code',
+    }, options)
+  }
+
+  protected getSubject(user: ExampleUserInfo): string {
+    return user.email
+  }
+}
+
+// In the route handling the provider's redirect back, once it carries `?code=...`:
+const { user, session } = await connector.authenticateWithCode(ctx, code)
+```
+
+`generateAuthUrl()`, `getUserInfo()`, `revokeToken()`, `authenticate()`, `exchangeCode()`,
+`authenticateWithCode()`, and `validateCode()` all come for free from the base class — override one
+only when the provider's own real contract genuinely doesn't match the generic implementation (see
+`GitHubOAuth2Connector.revokeToken()` above for a real example: GitHub's revoke endpoint needs
+`DELETE`, Basic auth, and a JSON body, not the `POST`-with-form-body shape the base class assumes).
+Every endpoint URL/`defaultScope` can be overridden per-instance via the constructor's `options`, on
+top of the subclass's own defaults.
+
+Building your own session instead of `authenticate()`'s generic one (custom permissions, a custom
+payload, your own DB writes)? `validateCode(code)` is `getUserInfo()`/`validateToken()`'s own
+code-flow counterpart — it exchanges `code` and returns just the user info, no session built, so
+it's a direct, one-line swap for `validateToken(token)` in that kind of flow.
+
+**Prefer `responseType: 'code'` + `tokenUrl` + `authenticateWithCode()`**, shown above, over the
+`responseType: 'token'` default + `authenticate()`. The code flow exchanges `code` for a token
+server-side, using this connector's own `clientSecret` — so the token it hands off is provably
+scoped to this app by construction. `authenticate()`'s own implicit-flow input has no such
+guarantee: it trusts whatever bearer token it's given, verified only by the provider, never by this
+app — a token issued for a different OAuth2 app registered with that same provider could be replayed
+here. `OAuth2Connector` logs a warning at construction whenever a connector is left on the implicit
+flow, as a reminder.
+
+`responseType` doesn't have to be fixed for a connector's whole lifetime — `generateAuthUrl()` takes
+it as a per-call option too, overriding the connector's own configured default just for that one
+URL:
+
+```ts
+// One call site wants the code flow; another (or the connector's own default) can stay on
+// whatever `responseType` was configured at construction — no second connector needed.
+connector.generateAuthUrl({ responseType: 'code' })
+```
+
+`GoogleOAuth2Connector` additionally honors `GOOGLE_OAUTH2_RESPONSE_TYPE` and
+`GOOGLE_OAUTH2_TOKEN_URL` as their own construction-time defaults — useful when the connector is
+registered through `@zanix/auth/core`'s default env-driven setup, with no `options` object to pass a
+default into directly. `GOOGLE_OAUTH2_TOKEN_URL` overrides Google's real token endpoint the same way
+`GOOGLE_OAUTH2_AUTH_URL`/`GOOGLE_OAUTH2_USERINFO_URL`/`GOOGLE_OAUTH2_REVOKE_URL` do for their own
+endpoints — rarely needed outside an enterprise proxy or a test double.
 
 ---
 
@@ -129,6 +211,10 @@ class LoginInteractor extends ZanixInteractor {
 
 The code is cached server-side (Redis when `REDIS_URI` is set, otherwise in-memory) against
 `target`, expires after `exp` seconds (default `300`), and is removed as soon as it's verified once.
+A wrong guess counts against `maxAttempts` (default `5`) — once reached, the code is rejected and
+removed even if it hasn't actually expired yet, so a fixed, small number of guesses is all an
+attacker gets. Pass it as `otp.verify(target, code, { maxAttempts })`'s 3rd argument, or
+`otp.authenticate(target, code, sessionOptions, { maxAttempts })`'s 4th.
 
 ---
 

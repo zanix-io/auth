@@ -6,10 +6,17 @@ export function google(this: ZanixAuthProvider): OAuthFlow<GoogleUserInfo> {
   return {
     generateAuthUrl: (options) => this.use('google-oauth2').generateAuthUrl(options),
     validateToken: (token) => this.use('google-oauth2').getUserInfo(token),
+    validateCode: (code) => this.use('google-oauth2').validateCode(code),
     authenticate: (token, sessionOptions) =>
       this.use('google-oauth2').authenticate(
         this.context,
         token,
+        sessionOptions,
+      ),
+    authenticateWithCode: (code, sessionOptions) =>
+      this.use('google-oauth2').authenticateWithCode(
+        this.context,
+        code,
         sessionOptions,
       ),
   }

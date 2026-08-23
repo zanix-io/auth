@@ -101,3 +101,16 @@ export type JWTOptions = {
 export type JWTVerifyOptions =
   & JWTOptions
   & Pick<Partial<JWTPayload>, 'iss' | 'sub' | 'aud'>
+  & {
+    /**
+     * Whether a token missing the `exp` claim entirely is rejected. `verifyJWT` only ever enforces
+     * expiration against a token that actually carries one (`payload.exp && currentTime >
+     * payload.exp`) — a token with no `exp` at all has nothing to compare against, so without this
+     * it's accepted as valid forever. Every session/service token this package itself issues always
+     * sets `exp` (`createJWT`'s own `expiration` option), so this only matters for a token from
+     * some other source, or a future caller of `createJWT` that omits `expiration`.
+     *
+     * @default true
+     */
+    requireExp?: boolean
+  }

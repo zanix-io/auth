@@ -7,6 +7,165 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-23
+
+### Added
+
+- **Every conditional `@Connector`/`@Provider` DSL registration function is now exported, not just
+  auto-run as a private module-level side effect**: `registerGoogleOAuth2Connector`
+  (`connectors/google/core.ts`), `registerAuthProvider` (`providers/core.ts`), and
+  `registerMiddlewares` (`middlewares/core.ts`) — all reachable via `@zanix/auth/core`. Each still
+  runs automatically once, at import time, exactly as before; the new export lets a caller
+  re-register after clearing the relevant registry (`closeAllConnections()`/
+  `ProgramModule.targets.resetContainer(['type:connector'])`, both `@zanix/server`) without needing
+  a fresh module evaluation — for a config-reload in a long-running process, or a test simulating a
+  different env state between cases. Same pattern adopted across `@zanix/datamaster`,
+  `@zanix/asyncmq`, `@zanix/notifications`, and `@zanix/app` in the same batch of work.
+- **`captchaGuard`/`@CaptchaGuard()`** — a new anti-bot middleware guard, same architectural family
+  as `ipAllowlistGuard`/`rateLimitGuard` (defense-in-depth, never a replacement for real
+  authentication/authorization), verifying a client-submitted captcha response token — carried in
+  the new `X-Znx-Captcha-Token` request header (`CAPTCHA_TOKEN_HEADER`) — against a third-party
+  anti-bot provider before allowing a request through:
+  - Three built-in providers, each a `CaptchaProviderAdapter` extending `@zanix/server`'s
+    `RestClient` (same pattern `OAuth2Connector`/`@zanix/notifications`'s SMS/WhatsApp adapters
+    already use): `RecaptchaAdapter` (Google reCAPTCHA v2/v3, `RECAPTCHA_SECRET_KEY`/
+    `RECAPTCHA_API_BASE`), `HCaptchaAdapter` (`HCAPTCHA_SECRET_KEY`/`HCAPTCHA_API_BASE`), and
+    `TurnstileAdapter` (Cloudflare Turnstile, `TURNSTILE_SECRET_KEY`/`TURNSTILE_API_BASE`).
+  - Provider selection follows `@zanix/notifications`' SMS/WhatsApp precedent exactly: an optional
+    `CAPTCHA_PROVIDER` selector, only required (throws `InternalError` otherwise) when more than one
+    provider's own secret-key env var is set at once — a single configured provider is auto-detected
+    with zero extra config. `resolveCaptchaProvider()` (exported) and the internal
+    `resolveCaptchaAdapter()` implement this; `options.provider`/`options.adapter`/
+    `options.secretKey`/`options.apiBase` let a caller configure a provider directly, bypassing env
+    resolution entirely.
+  - `options.minScore` (default `0.5`) gates score-based responses (reCAPTCHA v3's `score`) —
+    ignored for pass/fail-only responses (reCAPTCHA v2, hCaptcha, Turnstile never return a `score`).
+  - With no provider configured at all, `captchaGuard()` is a pass-through — matching
+    `ipAllowlistGuard`'s own unconfigured behavior, not a silent deny.
+  - `@zanix/utils`'s default redaction pattern now also covers `X-Znx-Captcha-Token`/`captchaToken`
+    (`(?:x-znx-)?captcha[-_]?token`), the same shape `(?:x-znx-app-)?token` already gives
+    `X-Znx-App-Token` — this header carries a bearer-shaped credential value.
+
+- **`GitHubOAuth2Connector`** — a second built-in OAuth2 provider, alongside
+  `GoogleOAuth2Connector`, mirroring its shape exactly (`generateAuthUrl()`,
+  `getUserInfo()`/`validateToken()`, `authenticate()`/`authenticateWithCode()`/`validateCode()`,
+  `GITHUB_OAUTH2_CLIENT_ID`/
+  `GITHUB_OAUTH2_CLIENT_SECRET`/`GITHUB_OAUTH2_REDIRECT_URI`/`GITHUB_OAUTH2_*_URL` env vars,
+  zero-config registration via `@zanix/auth/core`) and bound to the default provider as
+  `this.providers.get('auth').github`. Two real differences from Google, both verified against
+  GitHub's own current OAuth2/REST docs, not assumed by similarity:
+  - **Defaults to the authorization-code flow (`responseType: 'code'`), not the implicit flow.**
+    GitHub's OAuth2 implementation has no implicit flow at all — its `/login/oauth/authorize`
+    redirect always comes back with `?code=...`, never a bearer token directly — so
+    `.authenticate()`/`.validateToken()` cannot work against real GitHub.
+  - **`revokeToken()` is overridden**, since GitHub's real revoke endpoint
+    (`DELETE applications/{client_id}/token`, HTTP Basic auth with `clientId`/`clientSecret`, a JSON
+    `{ access_token }` body) has a genuinely different contract from the base `OAuth2Connector`'s
+    generic `POST`-with-form-body implementation (the shape Google's own revoke endpoint matches).
+  - `getSubject()` derives the session subject from the account's immutable numeric `id`, not
+    `email` — GitHub's `GET /user` response can return a `null` email for an account with a private
+    email setting, even with the `user:email` scope granted.
+
+- **`OAuth2Connector.authenticateWithCode(ctx, code, sessionOptions?)`** — the authorization-code
+  flow's own entry point, alongside the new protected `exchangeCode(code)` and `tokenUrl` config
+  field. Exchanges `code` for a real access token via a standard RFC 6749 §4.1.3 POST (using this
+  connector's own `clientSecret`, server-side) before running the same session-creation logic
+  `authenticate()` already does. Recommended over `authenticate()`'s implicit-flow input wherever
+  the provider supports it: the token this hands off is provably scoped to this app by construction
+  — no separate audience/`client_id` check needed, unlike a token `authenticate()` receives directly
+  from the client. A subclass only needs to add `tokenUrl` to its existing
+  `authUrl`/`userInfoUrl`/`revokeUrl` config and call the new method — no new logic of its own.
+- **`generateAuthUrl()` accepts `responseType` as a per-call option**, overriding the connector's
+  own configured default just for that one URL — one call site can request the authorization-code
+  flow while another keeps using the connector's own default, with no second connector instance
+  needed.
+- **`GoogleOAuth2Connector` honors `GOOGLE_OAUTH2_RESPONSE_TYPE`** (`'token'`/`'code'`, default
+  `'token'`) — so a connector registered through `@zanix/auth/core`'s own default env-driven setup
+  (no explicit options) can switch to the authorization-code flow with just an env var, no code
+  change to the registration itself.
+- **`OAuth2Connector.validateCode(code)`** — `getUserInfo`/`validateToken`'s own
+  authorization-code-flow counterpart: exchanges `code`, then returns just the user info, with no
+  session built. The direct, one-line replacement for `validateToken(token)` in a caller that builds
+  its own session afterward (custom permissions/payload, its own DB writes) instead of using
+  `authenticate()`'s generic one. Both `OAuthFlow`'s `google` extension
+  (`this.providers.get('auth').google`) and `GoogleOAuth2Connector` itself expose it.
+- **`GoogleOAuth2Connector` now configures `tokenUrl`** (Google's real token endpoint, overridable
+  via `GOOGLE_OAUTH2_TOKEN_URL`) **and exposes `authenticateWithCode` on `OAuthFlow`** — so
+  `this.providers.get('auth').google.authenticateWithCode(code, sessionOptions)` is available at the
+  same convenience tier `.authenticate()` already was, no extra wiring needed. The
+  [README](./README.md)'s own flagship example is updated to use it — it previously passed an
+  authorization `code` into `.authenticate()`, which actually expects an access token; that mismatch
+  is what surfaced this gap in the first place.
+
+### Fixed
+
+- **`verifyJWT` rejects a token with no `exp` claim at all by default (`requireExp`, defaults to
+  `true`).** It only ever checked expiration against a token that actually carried one
+  (`payload.exp && currentTime > payload.exp`) — a token missing `exp` entirely had nothing to
+  compare against, so it verified successfully forever. Every session/service token this package
+  itself issues already sets `exp` (`createJWT`'s `expiration` option), so this closes the gap for
+  any other caller of the public `createJWT`/`verifyJWT` primitives — pass `requireExp: false`
+  explicitly for a token deliberately meant to never expire.
+- **`otp.verify`/`authenticate` (`OtpFlow`) burn an OTP outright once `maxAttempts` (default `5`)
+  wrong guesses are made, instead of tolerating unlimited retries against it.** A wrong guess used
+  to be a pure no-op — the stored code was never touched unless it matched — so a short numeric code
+  (6 digits by default, 1,000,000 possibilities) behind no other rate limiting could simply be
+  retried for as long as its own TTL allowed. The failed-attempt count is tracked in its own cache
+  entry, independent of the OTP's `exp`, so it never outlives the OTP it's counting against.
+- **`otp.generate`'s underlying digit generator (`randomCode`) no longer has a modulo bias.** Each
+  digit used to be `byte % 10` on a raw `crypto.getRandomValues()` byte — since `256 % 10 !== 0`,
+  digits 0-5 landed with a 26/256 chance and digits 6-9 only 25/256, a small but real skew away from
+  uniform. It now uses rejection sampling (discarding a byte above `249`, the largest value that
+  still divides evenly into 10 outcomes) so every digit is exactly equally likely, drawing one batch
+  of random bytes up front rather than one at a time to stay a single `crypto.getRandomValues` call
+  in the common case.
+- `deno lint`'s own `@zanix/utils` plugin (`deno-zanix-plugin`) is now version-pinned (`^2.6.1`),
+  matching every other `@zanix/utils` import in `deno.jsonc` — it used to resolve unpinned, so a
+  lint run could silently pick up a newer, unreviewed plugin version.
+- **`OAuth2Connector` now warns (once, at construction) when a connector is left on the implicit
+  flow (`responseType: 'token'`, the default).** `authenticate()` trusts any bearer token it's
+  handed with no way to verify it was issued for this specific app — a token valid for a different
+  OAuth2 app registered with the same provider could be replayed here to authenticate as its owner.
+  See **Added**, above, for the recommended fix.
+- **`refreshSessionTokens` now rotates: the consumed refresh token is blocklisted as part of the
+  same call (when `options.cache` is provided), instead of staying valid indefinitely.** It used to
+  return `oldToken` without ever blocklisting it, so the same refresh token could be replayed to
+  mint new sessions forever — even long after the legitimate client had already moved on to its
+  rotated successor. This also makes the existing blocklist check effective against reuse: a stolen
+  token replayed after a legitimate refresh now hits that check and is rejected, rather than
+  silently succeeding again.
+- **Every session/subject/cookie-consent/refresh-token cookie `getSessionHeaders` sets now includes
+  `Secure`.** Without it, a browser would still attach these cookies over a plain-HTTP connection,
+  widening exposure to interception on any network hop that isn't fully HTTPS. Sourced from
+  `@zanix/helpers`'s `SESSION_COOKIE_ATTRIBUTES` — the same constant `@zanix/space`'s `csrfGuard`
+  cookie already uses, so the two can't drift apart.
+- **BREAKING: resolving an anonymous session identity (`getAnonymousSessionId`/
+  `generateAnonymousSession`/`getDefaultSessionHeaders`) now requires an explicit
+  `trustProxyHeader: true | false` — no default, no silent fallback.** These used to derive the
+  anonymous session id from `x-forwarded-for`/`cf-connecting-ip`/`x-real-ip` unconditionally —
+  headers a client fully controls unless a trusted proxy overwrites them — letting anyone mint
+  unlimited distinct anonymous rate-limit buckets for free by rotating the header value.
+  `trustProxyHeader: true` opts into that IP-keyed behavior (only safe behind a real trusted proxy);
+  `trustProxyHeader: false` makes every anonymous request share ONE identity instead — a deliberate,
+  explicit trade-off for deployments that can't guarantee a trusted proxy, never a silent default
+  either way. `getAnonymousSessionId` throws immediately if it's omitted — the single enforcement
+  point every caller goes through, so it can't be bypassed by a caller that doesn't happen to go
+  through `rateLimitGuard`.
+  - `AnonymousSessionOptions`, `RateLimitsOptions`, and `IpAllowlistOptions` are now all built on
+    `@zanix/helpers`'s shared `ProxyTrustOptions` contract instead of each independently
+    re-declaring the same `trustProxyHeader`/`trustedHeaders` pair — one shape, three consumers,
+    can't drift apart.
+  - `rateLimitGuard` ALSO validates eagerly, at construction time (when the guard is built, e.g. as
+    a `@Controller`'s `guards` argument evaluated at decorator-load time) whenever anonymous access
+    is enabled (`anonymousLimit` isn't `false`/`0`) — so misconfiguration fails at boot, not the
+    first request, same contract `ipAllowlistGuard` already established.
+  - `getDefaultSessionHeaders` gains `trustProxyHeader`/`trustedHeaders` options, forwarded to its
+    own anonymous fallback (only actually required when no client subject is resolvable) —
+    `jwtValidationGuard`'s own failure-response headers pass `trustProxyHeader: false` internally (a
+    shared id is fine there; it labels an already-rejected response, never gates a resource).
+  - Every existing caller reaching an anonymous session id needs to add `trustProxyHeader`
+    explicitly.
+
 ## [0.7.0] - 2026-08-17
 
 ### Added
@@ -137,7 +296,7 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
   of the same header names across `@zanix/auth`, `@zanix/core`, and `@zanix/notifications`. This is
   an internal change only — `@zanix/auth`'s own public exports (`userSessionHeaders`,
   `apiSessionHeaders`, `rateLimitGuard`, etc.) are unaffected. See `@zanix/server`'s
-  `docs/CONFIGURATION.md#auth--admin-protocol-headers`.
+  `docs/configuration.md#auth--admin-protocol-headers`.
 - Anonymous session IP resolution now uses the shared `getClientIp()` helper instead of manually
   parsing proxy headers, centralizing client IP extraction across the framework.
 

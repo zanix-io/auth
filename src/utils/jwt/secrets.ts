@@ -2,6 +2,7 @@ import type { SessionTypes } from 'typings/sessions.ts'
 
 import { decodeJWT } from './decode.ts'
 import { HttpError } from '@zanix/errors'
+import { JWK_PUB_ENV, JWT_KEY_ENV } from 'utils/constants.ts'
 
 /**
  * Retrieves the secret key associated with a token and session type.
@@ -25,7 +26,7 @@ export const getSecretByToken = (
 
   const keySuffix = kid ? `_${kid}` : ''
 
-  const keyName = type === 'user' ? `JWT_KEY${keySuffix}` : `JWK_PUB${keySuffix}`
+  const keyName = type === 'user' ? `${JWT_KEY_ENV}${keySuffix}` : `${JWK_PUB_ENV}${keySuffix}`
   const secret = Deno.env.get(keyName)
 
   if (secret) return secret
@@ -39,5 +40,7 @@ export const getSecretByToken = (
       keyType: type,
       keyName: keyName,
     },
+    exposeMeta: true,
+    exposeCause: true,
   })
 }

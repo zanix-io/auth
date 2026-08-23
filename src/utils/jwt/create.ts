@@ -11,6 +11,7 @@ import {
   signRSA,
 } from '@zanix/helpers'
 import logger from '@zanix/logger'
+import { InternalError } from '@zanix/errors'
 
 /**
  * Create a signed JWT token with expiration and claim validation.
@@ -25,7 +26,7 @@ import logger from '@zanix/logger'
  * @param {JWTOptions['algorithm']} [options.algorithm] - The expected signing algorithm of the token (e.g., 'RS256', 'HS256', 'HS384'). Defaults to `HS256`
  * @param {JWTOptions['encryptionKey']} [options.encryptionKey] - The key used to encrypt or protect the payload's sensitive data. Required on RSA.
  * @returns The generated JWT string.
- * @throws {Error} If `options.expiration` resolves to a duration of 0 seconds or less.
+ * @throws {InternalError} If `options.expiration` resolves to a duration of 0 seconds or less.
  *
  * @example
  * ```ts
@@ -60,7 +61,13 @@ export const createJWT = async (
     const current = Math.floor(Date.now() / 1000)
     const exp = parseTTL(expiration)
     if (exp <= 0) {
-      throw new Error('Expiration time must be greater than 0')
+      // A native `Error` here previously — a config value the calling app passed at token-creation
+      // time is invalid; a programmer/config invariant, not something the token's own subject
+      // could have caused (see `@zanix/errors`' docs, "Choosing a class").
+      throw new InternalError('Expiration time must be greater than 0', {
+        code: 'JWT_INVALID_EXPIRATION',
+        meta: { expiration },
+      })
     }
 
     // Add expiration to payload

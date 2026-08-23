@@ -2,9 +2,18 @@ import type { RateLimitsOptions } from 'typings/sessions.ts'
 import { httpErrorResponse, type MiddlewareGlobalGuard, RATE_LIMIT_HEADERS } from '@zanix/server'
 
 import { checkRateLimit, getRateLimitForSession } from 'utils/sessions/rate-limit.ts'
-import { generateAnonymousSession } from 'utils/sessions/anonymous.ts'
+import {
+  assertTrustProxyHeaderDecided,
+  generateAnonymousSession,
+} from 'utils/sessions/anonymous.ts'
 import { CACHE_KEYS } from 'utils/constants.ts'
 import { HttpError } from '@zanix/errors'
+
+/**
+ * Env var setting the rate-limit window (in seconds) `rateLimitGuard` counts requests over.
+ * Defaults to `60` when unset — see `rateLimitGuard`'s own doc for the full configuration shape.
+ */
+export const RATE_LIMIT_WINDOW_SECONDS_ENV = 'RATE_LIMIT_WINDOW_SECONDS'
 
 /**
  * Creates and returns a middleware guard that enforces rate limiting.
@@ -59,17 +68,36 @@ import { HttpError } from '@zanix/errors'
  * @param options.anonymousLimit - Maximum number of requests allowed for anonymous users within the time window.
  *                           Defaults to `100`.
  *                           Set to `0` or `false` to disable access for anonymous users.
+ * @param options.trustProxyHeader - Required (no default) whenever anonymous access is enabled — must be
+ *                           explicitly `true` (key each anonymous bucket off the resolved client IP; only
+ *                           safe behind a trusted proxy) or `false` (every anonymous request shares ONE
+ *                           bucket instead — a deliberate trade-off, not a silent default). Throws at
+ *                           construction time — when this guard is built, e.g. as a `@Controller`'s
+ *                           `guards` argument, not on the first request — if left unset. Same contract
+ *                           `ipAllowlistGuard` already established for this exact class of decision.
  * @function rateLimitGuard
  * @returns {MiddlewareGuard} A middleware guard instance that applies rate limiting logic to incoming requests.
+ * @throws {InternalError} If anonymous access is enabled (`anonymousLimit` isn't `false`/`0`) but
+ * `trustProxyHeader` isn't explicitly `true` or `false`.
  */
 export const rateLimitGuard = (
   options: RateLimitsOptions = {},
 ): MiddlewareGlobalGuard => {
   const {
     app,
-    windowSeconds = Number(Deno.env.get('RATE_LIMIT_WINDOW_SECONDS')) || 60,
+    windowSeconds = Number(Deno.env.get(RATE_LIMIT_WINDOW_SECONDS_ENV)) || 60,
     anonymousLimit = 100,
+    trustProxyHeader,
+    trustedHeaders,
   } = options
+
+  // `anonymousLimit` disables anonymous access via `false` OR `0` (see this function's own doc) —
+  // a plain truthy check matches that same semantics, unlike a strict `!== false` would. Delegates
+  // the actual check/throw to `assertTrustProxyHeaderDecided` — the single source of truth for
+  // this rule, shared with `getAnonymousSessionId`'s own defensive call — called eagerly HERE
+  // (before this function returns its guard closure) so misconfiguration fails at construction
+  // time, not on the first request.
+  if (anonymousLimit) assertTrustProxyHeaderDecided(trustProxyHeader, 'rateLimitGuard')
 
   const { limitHeader, remainingHeader, resetHeader, retryAfterHeader } = RATE_LIMIT_HEADERS
 
@@ -92,7 +120,10 @@ export const rateLimitGuard = (
 
     ctx.locals.session = sessionRateLimit
       ? session
-      : await generateAnonymousSession(anonymousLimit as number, headers)
+      : await generateAnonymousSession(anonymousLimit as number, headers, {
+        trustProxyHeader,
+        trustedHeaders,
+      })
 
     Object.freeze(ctx.locals.session.rateLimit)
 
@@ -123,6 +154,7 @@ export const rateLimitGuard = (
             windowSeconds,
             requestId: ctx.id,
           },
+          exposeMeta: true,
         }),
         {
           headers: { [retryAfterHeader]: secondsUntilReset },

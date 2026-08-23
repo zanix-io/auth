@@ -77,12 +77,10 @@ not restrict requests.
 Both exact IP addresses and IPv4 CIDR ranges are supported.
 
 ```ts
-allow: ;
-;[
-  '10.0.0.5',
-  '192.168.1.0/24',
-  '172.16.0.0/12',
-]
+@IpAllowlistGuard({
+  allow: ['10.0.0.5', '192.168.1.0/24', '172.16.0.0/12'],
+  trustProxyHeader: true,
+})
 ```
 
 Examples:

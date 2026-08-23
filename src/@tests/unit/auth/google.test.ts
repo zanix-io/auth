@@ -134,3 +134,50 @@ Deno.test('generateAuthUrl() honors a GOOGLE_OAUTH2_AUTH_URL env var override', 
 
   Deno.env.delete('GOOGLE_OAUTH2_AUTH_URL')
 })
+
+Deno.test('GOOGLE_OAUTH2_RESPONSE_TYPE=code switches to the authorization-code flow', () => {
+  Deno.env.set('GOOGLE_OAUTH2_RESPONSE_TYPE', 'code')
+
+  const connector = new TestGoogleConnector(new MockRestClient())
+  const { url } = connector.generateAuthUrl()
+
+  assertMatch(url, /response_type=code/)
+
+  Deno.env.delete('GOOGLE_OAUTH2_RESPONSE_TYPE')
+})
+
+Deno.test('an invalid GOOGLE_OAUTH2_RESPONSE_TYPE is ignored, default token still applies', () => {
+  Deno.env.set('GOOGLE_OAUTH2_RESPONSE_TYPE', 'not-a-real-value')
+
+  const connector = new TestGoogleConnector(new MockRestClient())
+  const { url } = connector.generateAuthUrl()
+
+  assertMatch(url, /response_type=token/)
+
+  Deno.env.delete('GOOGLE_OAUTH2_RESPONSE_TYPE')
+})
+
+Deno.test('validateCode() exchanges the code, no session built', async () => {
+  const calls: any[] = []
+  class ExchangeMockRestClient {
+    public http = {
+      post: <T>(url: string): T => {
+        calls.push({ type: 'post', url })
+        return { access_token: 'exchanged-google-token' } as T
+      },
+      get: <T>(url: string): T => {
+        calls.push({ type: 'get', url })
+        return { id: '123456', email: 'mock@example.com', verified_email: true } as T
+      },
+    }
+  }
+  const connector = new TestGoogleConnector(new ExchangeMockRestClient())
+
+  const user = await connector.validateCode('the-auth-code')
+
+  assertEquals(calls.length, 2)
+  assertEquals(calls[0].type, 'post')
+  assertMatch(calls[0].url, /\/token$/)
+  assertEquals(calls[1].type, 'get')
+  assertEquals(user.email, 'mock@example.com')
+})

@@ -10,8 +10,12 @@
 import { sessionHeadersInterceptor } from './headers.interceptor.ts'
 import { registerGlobalInterceptor } from '@zanix/server'
 
+// Exported (not just auto-run below) — kept consistent with every other `core.ts` loader's own
+// callable, re-invokable registration function across the Zanix ecosystem (see
+// `@zanix/datamaster`'s `storage/core.ts`'s own `registerSeaweedFSConnector` doc for the full
+// reasoning that pattern exists for).
 /** Global Middleware DSL definitions */
-const registerMiddlewares = () => {
+export const registerMiddlewares = (): void => {
   registerGlobalInterceptor(sessionHeadersInterceptor())
 }
 

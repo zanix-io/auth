@@ -1,8 +1,10 @@
 import type { SessionStatus, SessionTypes } from 'typings/sessions.ts'
+import type { AnonymousSessionOptions } from './anonymous.ts'
 
 import { GENERAL_HEADERS, type HandlerContext, SESSION_HEADERS } from '@zanix/server'
 import { getAnonymousSessionId } from './anonymous.ts'
 import { decodeJWT } from 'utils/jwt/decode.ts'
+import { SESSION_COOKIE_ATTRIBUTES } from '@zanix/helpers'
 
 /** The header dictionary returned by {@link getSessionHeaders} and {@link getDefaultSessionHeaders}. */
 export type Headers = { 'Set-Cookie': string[] } & { [key: string]: string }
@@ -19,7 +21,7 @@ const { cookiesAcceptedHeader } = GENERAL_HEADERS
  * - If `cookiesAccepted` is `true`, also sets `Set-Cookie` entries for the
  *   session status, the subject, and cookie consent itself, each with
  *   `Max-Age=<maxAge>` (cookie lifetime in seconds), `Path=/`, `HttpOnly`,
- *   `SameSite=Strict`. If a `refreshToken` is provided (or `maxAge` is `0`,
+ *   `Secure`, `SameSite=Strict`. If a `refreshToken` is provided (or `maxAge` is `0`,
  *   to clear it), a refresh-token cookie is set as well — its `Max-Age` is
  *   derived from the refresh token's own `exp` claim, not from `maxAge`.
  * - If `cookiesAccepted` is `false`, no cookies are added.
@@ -72,7 +74,7 @@ export function getSessionHeaders(options: {
     const nowInSeconds = Math.floor(Date.now() / 1000) // current Unix timestamp
     const maxAge = Math.max(0, Math.floor(expiration - nowInSeconds))
 
-    const baseCookie = 'Path=/; HttpOnly; SameSite=Strict'
+    const baseCookie = SESSION_COOKIE_ATTRIBUTES
     const baseCookieWithExp = `Max-Age=${maxAge}; ${baseCookie}`
 
     headers['Set-Cookie'].push(
@@ -123,25 +125,45 @@ export function getSessionHeaders(options: {
  * @param {HandlerContext['cookies']} options.cookies - The request cookies.
  * @param {SessionTypes} options.type - The type of session, used to determine the appropriate header/cookie keys.
  * @param {boolean} options.cookiesAccepted - Whether cookies are accepted by the client, affecting header generation.
+ * @param {boolean} [options.trustProxyHeader] - Forwarded to {@link getAnonymousSessionId} for the
+ *   fallback-to-anonymous path (when no client subject is found in `cookies`/`headers`) — see that
+ *   function's own doc. Only required (no default) when that fallback actually runs; a request that
+ *   resolves a real client subject never needs it.
+ * @param {string[]} [options.trustedHeaders] - Forwarded to {@link getAnonymousSessionId}, same
+ *   fallback path.
  * @returns {Promise<Record<string, string>>} A promise that resolves to an object containing the default session headers.
  *
  * @example
  * const headers = await getDefaultSessionHeaders({
  *   headers: request.headers,
  *   type: 'user',
- *   cookiesAccepted: true
+ *   cookiesAccepted: true,
+ *   trustProxyHeader: false,
  * });
+ * @throws {InternalError} If no client subject is found (falls back to
+ * {@link getAnonymousSessionId}) and `trustProxyHeader` isn't explicitly `true` or `false`.
  */
-export const getDefaultSessionHeaders = async (options: {
-  sessionStatus?: SessionStatus
-  headers: HandlerContext['req']['headers']
-  cookies: HandlerContext['cookies']
-  type: SessionTypes
-  cookiesAccepted: boolean
-}): Promise<Headers> => {
-  const { headers, type, cookiesAccepted, sessionStatus, cookies } = options
+export const getDefaultSessionHeaders = async (
+  options: {
+    sessionStatus?: SessionStatus
+    headers: HandlerContext['req']['headers']
+    cookies: HandlerContext['cookies']
+    type: SessionTypes
+    cookiesAccepted: boolean
+  } & AnonymousSessionOptions,
+): Promise<Headers> => {
+  const {
+    headers,
+    type,
+    cookiesAccepted,
+    sessionStatus,
+    cookies,
+    trustProxyHeader,
+    trustedHeaders,
+  } = options
   const clientSubject = getClientSubject(headers, cookies, type)
-  const baseSubject = clientSubject || await getAnonymousSessionId(headers)
+  const baseSubject = clientSubject ||
+    await getAnonymousSessionId(headers, { trustProxyHeader, trustedHeaders })
   return getSessionHeaders({
     cookiesAccepted,
     type,

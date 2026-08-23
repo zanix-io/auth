@@ -2,6 +2,7 @@ import {
   shouldAllowDifferentLens,
   shouldGenerateAndExpire,
   shouldGenerateAndVerify,
+  shouldLockOutAfterMaxAttempts,
 } from './asserts.ts'
 
 Deno.test({
@@ -22,4 +23,9 @@ Deno.test('should generate and verify an OTP', async () => {
 Deno.test('should allow diffetent lenghts', async () => {
   Deno.env.delete('REDIS_URI')
   await shouldAllowDifferentLens('local')
+})
+
+Deno.test('should lock out after maxAttempts wrong guesses', async () => {
+  Deno.env.delete('REDIS_URI')
+  await shouldLockOutAfterMaxAttempts('local')
 })

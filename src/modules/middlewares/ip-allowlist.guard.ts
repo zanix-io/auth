@@ -1,17 +1,33 @@
+import type { ProxyTrustOptions } from '@zanix/helpers'
+
 import { getClientIp, isIpInCidr } from '@zanix/helpers'
 import { httpErrorResponse, type MiddlewareGlobalGuard } from '@zanix/server'
 import { HttpError, InternalError } from '@zanix/errors'
 
 /**
- * The IP allowlist configuration options.
+ * Env var providing the default IP allowlist for `ipAllowlistGuard` (a comma-separated list of
+ * exact IPs and/or IPv4 CIDR ranges) when `options.allow` is omitted.
  */
-export interface IpAllowlistOptions {
+export const ADMIN_IP_ALLOWLIST_ENV = 'ADMIN_IP_ALLOWLIST'
+
+/**
+ * The IP allowlist configuration options. `trustProxyHeader`/`trustedHeaders` are `@zanix/helpers`'s
+ * shared {@linkcode ProxyTrustOptions} contract — see that type's own doc for the general shape;
+ * this guard's own doc on `trustProxyHeader` below covers what "not trusted" resolves to HERE
+ * specifically (a construction-time throw, not a silent pass-through).
+ */
+export interface IpAllowlistOptions extends ProxyTrustOptions {
   /**
    * Exact IPs or IPv4 CIDR ranges allowed to access the resource (e.g. `['10.0.0.1', '10.0.0.0/8']`).
    * If omitted, falls back to the `ADMIN_IP_ALLOWLIST` environment variable (comma-separated).
    * If neither is set, the guard is a pass-through — it does not restrict anything.
    */
   allow?: string[]
+  // Redeclares `ProxyTrustOptions.trustProxyHeader` (same `boolean | undefined` type — this does
+  // NOT change what's accepted) purely so hovering it on `IpAllowlistOptions` specifically shows
+  // THIS doc instead of `ProxyTrustOptions`'s generic one. `trustedHeaders` is deliberately NOT
+  // redeclared below: "headers considered trustworthy" means the same thing in every consumer, so
+  // the shared doc is already the right one.
   /**
    * Must be explicitly set to `true` to trust the `x-forwarded-for`/`cf-connecting-ip`/`x-real-ip`
    * headers used to resolve the client IP. Since these headers can be spoofed by the client unless
@@ -20,12 +36,6 @@ export interface IpAllowlistOptions {
    * `trustProxyHeader` is not `true`, it throws at construction time instead of at request time.
    */
   trustProxyHeader?: boolean
-  /**
-   * Headers considered trustworthy by the application
-   * deployment. The caller is responsible for ensuring these headers cannot be
-   * spoofed by untrusted clients.
-   */
-  trustedHeaders?: string[]
 }
 
 /**
@@ -63,7 +73,7 @@ export const ipAllowlistGuard = (
 ): MiddlewareGlobalGuard => {
   const { trustProxyHeader = false, trustedHeaders } = options
 
-  const allow = options.allow ?? Deno.env.get('ADMIN_IP_ALLOWLIST')?.split(',')
+  const allow = options.allow ?? Deno.env.get(ADMIN_IP_ALLOWLIST_ENV)?.split(',')
     .map((entry) => entry.trim()).filter(Boolean)
 
   if (allow?.length && !trustProxyHeader) {

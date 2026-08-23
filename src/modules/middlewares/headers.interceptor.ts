@@ -27,10 +27,10 @@ import {
  * - If `X-Znx-Cookies-Accepted: true` is present (in headers or cookies), session cookies are sent via
  *   `Set-Cookie`:
  *
- *           - X-Znx-App-Token=<sessionToken>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
- *           - X-Znx-<type>-Session-Status=<SessionStatus>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
- *           - X-Znx-<type>-Id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
- *           - X-Znx-Cookies-Accepted=true; Max-Age=<seconds>; Path=/; HttpOnly; SameSite=Strict
+ *           - X-Znx-App-Token=<sessionToken>; Max-Age=<seconds>; Path=/; HttpOnly; Secure; SameSite=Strict
+ *           - X-Znx-<type>-Session-Status=<SessionStatus>; Max-Age=<seconds>; Path=/; HttpOnly; Secure; SameSite=Strict
+ *           - X-Znx-<type>-Id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; Secure; SameSite=Strict
+ *           - X-Znx-Cookies-Accepted=true; Max-Age=<seconds>; Path=/; HttpOnly; Secure; SameSite=Strict
  *
  * - `Max-Age` is calculated from the session expiration timestamp minus the current Unix time.
  *

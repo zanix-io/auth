@@ -14,13 +14,14 @@ import { defineLocalSession } from './context.ts'
 import { createJWT } from 'utils/jwt/create.ts'
 import { decodeJWT } from 'utils/jwt/decode.ts'
 import { parseTTL } from '@zanix/helpers'
+import { JWK_PRI_ENV, JWT_KEY_ENV } from 'utils/constants.ts'
 
 /** Get JWT secret */
 const getCurrentSecret = (
   type: SessionTypes,
 ): { value: string; version?: `V${number}` } => {
   const isRSA = type === 'api'
-  const keyName = isRSA ? 'JWK_PRI' : 'JWT_KEY'
+  const keyName = isRSA ? JWK_PRI_ENV : JWT_KEY_ENV
 
   const secret = getRotatingKey(keyName)
 
@@ -29,6 +30,7 @@ const getCurrentSecret = (
   throw new InternalError(
     `An error occurred while creating the ${type} session.`,
     {
+      code: 'AUTH_SESSION_JWT_KEY_MISSING',
       cause: `Missing required JWT key in environment variables: ${keyName}.`,
       meta: {
         source: 'zanix',

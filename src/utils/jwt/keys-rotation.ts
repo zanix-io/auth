@@ -1,23 +1,24 @@
 import { isNumberString } from '@zanix/validator'
 import { parseTTL } from '@zanix/helpers'
+import { JWK_PRI_ENV, JWK_ROTATION_CYCLE_ENV, JWT_KEY_ENV } from 'utils/constants.ts'
 
-export const jwtKeys: {
-  'JWT_KEY': Map<number, { value: string; version: `V${number}` }>
-  'JWK_PRI': Map<number, { value: string; version: `V${number}` }>
-} = {
-  JWT_KEY: new Map<number, { value: string; version: `V${number}` }>(),
-  JWK_PRI: new Map<number, { value: string; version: `V${number}` }>(),
+export const jwtKeys: Record<
+  typeof JWT_KEY_ENV | typeof JWK_PRI_ENV,
+  Map<number, { value: string; version: `V${number}` }>
+> = {
+  [JWT_KEY_ENV]: new Map<number, { value: string; version: `V${number}` }>(),
+  [JWK_PRI_ENV]: new Map<number, { value: string; version: `V${number}` }>(),
 }
 
 /**
  * Returns all versioned keys for a given prefix.
  * Versioned keys follow the pattern `${PREFIX}_V1`, `${PREFIX}_V2`, ...
  *
- * @param {'JWT_KEY' | 'JWK_PRI'} prefix - The environment variable prefix.
+ * @param {typeof JWT_KEY_ENV | typeof JWK_PRI_ENV} prefix - The environment variable prefix.
  * @returns { Map<number, { value: string; version: `V${number}` }>} Ordered list of versioned key values found in the environment.
  */
 function getVersionedKeys(
-  prefix: 'JWT_KEY' | 'JWK_PRI',
+  prefix: typeof JWT_KEY_ENV | typeof JWK_PRI_ENV,
 ): Map<number, { value: string; version: `V${number}` }> {
   const jwks = jwtKeys[prefix]
   if (jwks.size) return jwks
@@ -43,7 +44,7 @@ function getVersionedKeys(
  * @returns {number} The cycle length in seconds. Returns 0 if rotation is disabled.
  */
 function getRotationCycle(): number {
-  const cycleStr = Deno.env.get('JWK_ROTATION_CYCLE') || '30d'
+  const cycleStr = Deno.env.get(JWK_ROTATION_CYCLE_ENV) || '30d'
   if (cycleStr === '0') return 0
   return parseTTL(isNumberString(cycleStr) ? Number(cycleStr) : cycleStr)
 }
@@ -77,11 +78,11 @@ function getActiveVersionIndex(cycleSeconds: number, total: number): number {
  * `JWT_KEY_V2`, `JWT_KEY_V3`, ...). If fewer or more versions are present,
  * the rotation adapts accordingly and cycles through the available keys.
  *
- * @param {'JWT_KEY' | 'JWK_PRI'} prefix - Environment variable prefix to resolve.
+ * @param {typeof JWT_KEY_ENV | typeof JWK_PRI_ENV} prefix - Environment variable prefix to resolve.
  * @returns {{ value?: string; version?: \`V${number}\` }} The selected key value and, when versioned, its version.
  */
 export function getRotatingKey(
-  prefix: 'JWT_KEY' | 'JWK_PRI',
+  prefix: typeof JWT_KEY_ENV | typeof JWK_PRI_ENV,
 ): { value?: string; version?: `V${number}` } {
   const versions = getVersionedKeys(prefix)
 

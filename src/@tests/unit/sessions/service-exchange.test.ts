@@ -1,9 +1,10 @@
 import { assert, assertEquals, assertRejects } from '@std/assert'
 import { generateRSAKeys } from '@zanix/helpers'
-import { InternalError, PermissionDenied } from '@zanix/errors'
+import { HttpError, InternalError, PermissionDenied } from '@zanix/errors'
 import {
   createServiceAssertion,
   exchangeServiceCredential,
+  exchangeServiceCredentialBase,
   resolveServiceAssertionKeyId,
   resolveServiceAssertionPrivateKey,
 } from 'utils/sessions/service-exchange.ts'
@@ -18,7 +19,7 @@ console.error = () => {}
 
 const SERVICE_ID = 'test-service'
 
-// `exchangeServiceCredential` mints its access token via `createAppToken`, which needs
+// `exchangeServiceCredentialBase` mints its access token via `createAppToken`, which needs
 // `@zanix/auth`'s OWN signing key (JWK_PRI) — distinct from the per-service keys under test here.
 // `JWK_PUB` (the matching verification key) is also set so a minted token can be round-tripped
 // through `getSecretByToken` within the same test, exactly like a real deployment would.
@@ -184,11 +185,12 @@ Deno.test({
   name:
     'createServiceAssertion: privateKey omitted, nothing registered — rejects with InternalError naming the expected env var',
   fn: async () => {
-    await assertRejects(
+    const error = await assertRejects(
       () => createServiceAssertion({ serviceId: 'unregistered-signer' }),
       InternalError,
       'JWK_PRI_unregistered-signer',
     )
+    assertEquals(error.code, 'AUTH_SERVICE_ASSERTION_PRIVATE_KEY_MISSING')
   },
 })
 
@@ -232,7 +234,7 @@ Deno.test({
         serviceId: SERVICE_ID,
         privateKey: btoa(privateKey),
       })
-      const credential = await exchangeServiceCredential(encodedAssertion)
+      const credential = await exchangeServiceCredentialBase(encodedAssertion)
       assertEquals(credential.serviceId, SERVICE_ID)
 
       Deno.env.delete(`JWK_PUB_${SERVICE_ID}`)
@@ -240,7 +242,7 @@ Deno.test({
   },
 })
 
-Deno.test('exchangeServiceCredential: mints an api token for a valid assertion', async () => {
+Deno.test('exchangeServiceCredentialBase: mints an api token for a valid assertion', async () => {
   await withAuthSigningKey(async () => {
     const { privateKey, publicKey } = await generateRSAKeys()
     Deno.env.set(`JWK_PUB_${SERVICE_ID}`, btoa(publicKey))
@@ -249,7 +251,7 @@ Deno.test('exchangeServiceCredential: mints an api token for a valid assertion',
       serviceId: SERVICE_ID,
       privateKey: btoa(privateKey),
     })
-    const credential = await exchangeServiceCredential(assertion)
+    const credential = await exchangeServiceCredentialBase(assertion)
 
     assertEquals(credential.serviceId, SERVICE_ID)
     assert(credential.expiresIn > 0)
@@ -263,7 +265,7 @@ Deno.test('exchangeServiceCredential: mints an api token for a valid assertion',
   })
 })
 
-Deno.test('exchangeServiceCredential: grants SERVICE_PERMISSIONS_<id> if set', async () => {
+Deno.test('exchangeServiceCredentialBase: grants SERVICE_PERMISSIONS_<id> if set', async () => {
   await withAuthSigningKey(async () => {
     const { privateKey, publicKey } = await generateRSAKeys()
     Deno.env.set(`JWK_PUB_${SERVICE_ID}`, btoa(publicKey))
@@ -276,7 +278,7 @@ Deno.test('exchangeServiceCredential: grants SERVICE_PERMISSIONS_<id> if set', a
       serviceId: SERVICE_ID,
       privateKey: btoa(privateKey),
     })
-    const credential = await exchangeServiceCredential(assertion)
+    const credential = await exchangeServiceCredentialBase(assertion)
 
     const { payload } = decodeJWT(credential.accessToken)
     assertEquals(payload.aud, ['triggers:read', 'triggers:write'])
@@ -286,7 +288,7 @@ Deno.test('exchangeServiceCredential: grants SERVICE_PERMISSIONS_<id> if set', a
   })
 })
 
-Deno.test('exchangeServiceCredential: defaults rateLimit to 100 (same as user)', async () => {
+Deno.test('exchangeServiceCredentialBase: defaults rateLimit to 100 (same as user)', async () => {
   await withAuthSigningKey(async () => {
     const { privateKey, publicKey } = await generateRSAKeys()
     Deno.env.set(`JWK_PUB_${SERVICE_ID}`, btoa(publicKey))
@@ -295,7 +297,7 @@ Deno.test('exchangeServiceCredential: defaults rateLimit to 100 (same as user)',
       serviceId: SERVICE_ID,
       privateKey: btoa(privateKey),
     })
-    const credential = await exchangeServiceCredential(assertion)
+    const credential = await exchangeServiceCredentialBase(assertion)
 
     const { payload } = decodeJWT(credential.accessToken)
     assertEquals(payload.rateLimit, 100)
@@ -304,7 +306,7 @@ Deno.test('exchangeServiceCredential: defaults rateLimit to 100 (same as user)',
   })
 })
 
-Deno.test('exchangeServiceCredential: grants SERVICE_RATE_LIMIT_<id> when configured', async () => {
+Deno.test('exchangeServiceCredentialBase: grants SERVICE_RATE_LIMIT_<id> when set', async () => {
   await withAuthSigningKey(async () => {
     const { privateKey, publicKey } = await generateRSAKeys()
     Deno.env.set(`JWK_PUB_${SERVICE_ID}`, btoa(publicKey))
@@ -314,7 +316,7 @@ Deno.test('exchangeServiceCredential: grants SERVICE_RATE_LIMIT_<id> when config
       serviceId: SERVICE_ID,
       privateKey: btoa(privateKey),
     })
-    const credential = await exchangeServiceCredential(assertion)
+    const credential = await exchangeServiceCredentialBase(assertion)
 
     const { payload } = decodeJWT(credential.accessToken)
     assertEquals(payload.rateLimit, 5000)
@@ -324,17 +326,17 @@ Deno.test('exchangeServiceCredential: grants SERVICE_RATE_LIMIT_<id> when config
   })
 })
 
-Deno.test('exchangeServiceCredential: rejects an unregistered service', async () => {
+Deno.test('exchangeServiceCredentialBase: rejects an unregistered service', async () => {
   const { privateKey } = await generateRSAKeys()
   const assertion = await createServiceAssertion({
     serviceId: 'unregistered-service',
     privateKey: btoa(privateKey),
   })
 
-  await assertRejects(() => exchangeServiceCredential(assertion))
+  await assertRejects(() => exchangeServiceCredentialBase(assertion))
 })
 
-Deno.test('exchangeServiceCredential: rejects an assertion with no kid header', async () => {
+Deno.test('exchangeServiceCredentialBase: rejects an assertion with no kid header', async () => {
   const { privateKey } = await generateRSAKeys()
   const assertion = await createJWT(
     { iss: SERVICE_ID, sub: SERVICE_ID, aud: SERVICE_EXCHANGE_AUDIENCE },
@@ -343,13 +345,13 @@ Deno.test('exchangeServiceCredential: rejects an assertion with no kid header', 
   )
 
   await assertRejects(
-    () => exchangeServiceCredential(assertion),
+    () => exchangeServiceCredentialBase(assertion),
     PermissionDenied,
     'does not identify a valid service',
   )
 })
 
-Deno.test('exchangeServiceCredential: rejects when sub does not match iss', async () => {
+Deno.test('exchangeServiceCredentialBase: rejects when sub does not match iss', async () => {
   const { privateKey } = await generateRSAKeys()
   const assertion = await createJWT(
     { iss: 'someone-else', sub: SERVICE_ID, aud: SERVICE_EXCHANGE_AUDIENCE },
@@ -358,13 +360,13 @@ Deno.test('exchangeServiceCredential: rejects when sub does not match iss', asyn
   )
 
   await assertRejects(
-    () => exchangeServiceCredential(assertion),
+    () => exchangeServiceCredentialBase(assertion),
     PermissionDenied,
     'does not identify a valid service',
   )
 })
 
-Deno.test('exchangeServiceCredential: rejects an assertion signed by the wrong key', async () => {
+Deno.test('exchangeServiceCredentialBase: rejects an assertion signed by wrong key', async () => {
   const { publicKey } = await generateRSAKeys()
   const { privateKey: wrongPrivateKey } = await generateRSAKeys()
   Deno.env.set(`JWK_PUB_${SERVICE_ID}`, btoa(publicKey))
@@ -375,32 +377,35 @@ Deno.test('exchangeServiceCredential: rejects an assertion signed by the wrong k
   })
 
   await assertRejects(
-    () => exchangeServiceCredential(assertion),
+    () => exchangeServiceCredentialBase(assertion),
     PermissionDenied,
   )
 
   Deno.env.delete(`JWK_PUB_${SERVICE_ID}`)
 })
 
-Deno.test('exchangeServiceCredential: rejects the wrong audience', async () => {
+Deno.test('exchangeServiceCredentialBase: rejects the wrong audience', async () => {
   const { privateKey, publicKey } = await generateRSAKeys()
   Deno.env.set(`JWK_PUB_${SERVICE_ID}`, btoa(publicKey))
 
+  // `expiration` set so this genuinely fails on the audience mismatch below, not on `verifyJWT`'s
+  // own (default-on) exp requirement.
   const assertion = await createJWT(
     { iss: SERVICE_ID, sub: SERVICE_ID, aud: 'some-other-audience' },
     privateKey,
-    { algorithm: 'RS256', keyID: SERVICE_ID },
+    { algorithm: 'RS256', keyID: SERVICE_ID, expiration: '5m' },
   )
 
-  await assertRejects(
-    () => exchangeServiceCredential(assertion),
+  const error = await assertRejects(
+    () => exchangeServiceCredentialBase(assertion),
     PermissionDenied,
   )
+  assertEquals(error.code, 'INVALID_TOKEN_PERMISSIONS')
 
   Deno.env.delete(`JWK_PUB_${SERVICE_ID}`)
 })
 
-Deno.test('exchangeServiceCredential: honors JWK_PRI rotation end to end', async () => {
+Deno.test('exchangeServiceCredentialBase: honors JWK_PRI rotation end to end', async () => {
   // Distinct from `withAuthSigningKey` above (a bare, non-rotating `JWK_PRI`) — this exercises
   // @zanix/auth's OWN key-rotation machinery (`JWK_PRI_V1`) during the mint step, then proves the
   // round trip: the minted token's `kid` must be the rotation version, not `SERVICE_ID`, and
@@ -419,7 +424,7 @@ Deno.test('exchangeServiceCredential: honors JWK_PRI rotation end to end', async
       serviceId: SERVICE_ID,
       privateKey: btoa(privateKey),
     })
-    const credential = await exchangeServiceCredential(assertion)
+    const credential = await exchangeServiceCredentialBase(assertion)
 
     const { header } = decodeJWT(credential.accessToken)
     assertEquals(
@@ -442,7 +447,7 @@ Deno.test('exchangeServiceCredential: honors JWK_PRI rotation end to end', async
   }
 })
 
-Deno.test('exchangeServiceCredential: rejects an expired assertion', async () => {
+Deno.test('exchangeServiceCredentialBase: rejects an expired assertion', async () => {
   const { privateKey, publicKey } = await generateRSAKeys()
   Deno.env.set(`JWK_PUB_${SERVICE_ID}`, btoa(publicKey))
 
@@ -455,7 +460,7 @@ Deno.test('exchangeServiceCredential: rejects an expired assertion', async () =>
   const realNow = Date.now
   Date.now = () => realNow() + 2_000
   await assertRejects(
-    () => exchangeServiceCredential(assertion),
+    () => exchangeServiceCredentialBase(assertion),
     PermissionDenied,
   )
   Date.now = realNow
@@ -463,9 +468,77 @@ Deno.test('exchangeServiceCredential: rejects an expired assertion', async () =>
   Deno.env.delete(`JWK_PUB_${SERVICE_ID}`)
 })
 
+/**
+ * Regression coverage for a confirmed defense: `exchangeServiceCredentialBase` always verifies with
+ * `algorithm: 'RS256'` hardcoded in its own `verifyJWT` call — never whatever algorithm the
+ * assertion's own header claims (see `verify.ts`'s own algorithm-fixing behavior). An assertion
+ * signed with a different algorithm (here HS256, a symmetric secret) — even claiming the correct
+ * `iss`/`sub`/`aud`/`kid` — can never be accepted, since it's always checked as an RS256 signature
+ * against the registered RSA public key, which a non-RSA signature can never satisfy.
+ */
+Deno.test({
+  name:
+    'exchangeServiceCredentialBase: hardcodes RS256 — rejects an assertion signed with a different algorithm',
+  fn: async () => {
+    const { publicKey } = await generateRSAKeys()
+    Deno.env.set(`JWK_PUB_${SERVICE_ID}`, btoa(publicKey))
+
+    const assertion = await createJWT(
+      { iss: SERVICE_ID, sub: SERVICE_ID, aud: SERVICE_EXCHANGE_AUDIENCE },
+      'attacker-controlled-secret',
+      { algorithm: 'HS256', keyID: SERVICE_ID, expiration: '5m' },
+    )
+
+    await assertRejects(
+      () => exchangeServiceCredentialBase(assertion),
+      PermissionDenied,
+    )
+
+    Deno.env.delete(`JWK_PUB_${SERVICE_ID}`)
+  },
+})
+
+/**
+ * Regression coverage for a confirmed defense: granted permissions come ONLY from
+ * `SERVICE_PERMISSIONS_<serviceId>` (operator-configured), never from anything the assertion
+ * itself claims — an assertion only ever proves identity, it never gets to request its own
+ * privileges. Here the (hand-forged) assertion smuggles its own `permissions` claim, distinct from
+ * the env-configured list, and the minted token's actual permissions must match the env var alone.
+ */
+Deno.test({
+  name:
+    'exchangeServiceCredentialBase: minted permissions come only from SERVICE_PERMISSIONS_<id>, never from the assertion payload',
+  fn: async () => {
+    await withAuthSigningKey(async () => {
+      const { privateKey, publicKey } = await generateRSAKeys()
+      Deno.env.set(`JWK_PUB_${SERVICE_ID}`, btoa(publicKey))
+      Deno.env.set(`SERVICE_PERMISSIONS_${SERVICE_ID}`, 'triggers:read')
+
+      const assertion = await createJWT(
+        {
+          iss: SERVICE_ID,
+          sub: SERVICE_ID,
+          aud: SERVICE_EXCHANGE_AUDIENCE,
+          permissions: ['admin:all', 'superadmin'],
+        },
+        privateKey,
+        { algorithm: 'RS256', keyID: SERVICE_ID, expiration: '5m' },
+      )
+
+      const credential = await exchangeServiceCredentialBase(assertion)
+      const { payload } = decodeJWT(credential.accessToken)
+
+      assertEquals(payload.aud, ['triggers:read'])
+
+      Deno.env.delete(`JWK_PUB_${SERVICE_ID}`)
+      Deno.env.delete(`SERVICE_PERMISSIONS_${SERVICE_ID}`)
+    })
+  },
+})
+
 // ── Service-credential key rotation (JWK_PUB_<serviceId>_<keyId>), with overlap support ──
 
-Deno.test('exchangeServiceCredential: rejects an unknown keyId', async () => {
+Deno.test('exchangeServiceCredentialBase: rejects an unknown keyId', async () => {
   const { privateKey } = await generateRSAKeys()
   const assertion = await createServiceAssertion({
     serviceId: SERVICE_ID,
@@ -473,10 +546,10 @@ Deno.test('exchangeServiceCredential: rejects an unknown keyId', async () => {
     keyId: 'key1',
   })
   // Nothing registered under JWK_PUB_test-service_key1 at all.
-  await assertRejects(() => exchangeServiceCredential(assertion))
+  await assertRejects(() => exchangeServiceCredentialBase(assertion))
 })
 
-Deno.test('exchangeServiceCredential: verifies against JWK_PUB_<serviceId>_<keyId>', async () => {
+Deno.test('exchangeServiceCredentialBase: verifies via JWK_PUB_<serviceId>_<keyId>', async () => {
   await withAuthSigningKey(async () => {
     const { privateKey, publicKey } = await generateRSAKeys()
     Deno.env.set(`JWK_PUB_${SERVICE_ID}_key1`, btoa(publicKey))
@@ -486,7 +559,7 @@ Deno.test('exchangeServiceCredential: verifies against JWK_PUB_<serviceId>_<keyI
       privateKey: btoa(privateKey),
       keyId: 'key1',
     })
-    const credential = await exchangeServiceCredential(assertion)
+    const credential = await exchangeServiceCredentialBase(assertion)
 
     assertEquals(credential.serviceId, SERVICE_ID)
 
@@ -494,7 +567,7 @@ Deno.test('exchangeServiceCredential: verifies against JWK_PUB_<serviceId>_<keyI
   })
 })
 
-Deno.test('exchangeServiceCredential: both keys verify during a rotation overlap', async () => {
+Deno.test('exchangeServiceCredentialBase: both keys verify during a rotation overlap', async () => {
   await withAuthSigningKey(async () => {
     const oldKeys = await generateRSAKeys()
     const newKeys = await generateRSAKeys()
@@ -509,7 +582,7 @@ Deno.test('exchangeServiceCredential: both keys verify during a rotation overlap
         privateKey: btoa(oldKeys.privateKey),
         keyId: 'key1',
       })
-      const oldCredential = await exchangeServiceCredential(oldAssertion)
+      const oldCredential = await exchangeServiceCredentialBase(oldAssertion)
       assertEquals(oldCredential.serviceId, SERVICE_ID)
 
       // ...and one signed with the NEW key both succeed, in either order, throughout the window.
@@ -518,7 +591,7 @@ Deno.test('exchangeServiceCredential: both keys verify during a rotation overlap
         privateKey: btoa(newKeys.privateKey),
         keyId: 'key2',
       })
-      const newCredential = await exchangeServiceCredential(newAssertion)
+      const newCredential = await exchangeServiceCredentialBase(newAssertion)
       assertEquals(newCredential.serviceId, SERVICE_ID)
     } finally {
       Deno.env.delete(`JWK_PUB_${SERVICE_ID}_key1`)
@@ -527,7 +600,7 @@ Deno.test('exchangeServiceCredential: both keys verify during a rotation overlap
   })
 })
 
-Deno.test('exchangeServiceCredential: retiring old key rejects it, new key works', async () => {
+Deno.test('exchangeServiceCredentialBase: retiring old key rejects it, new key works', async () => {
   await withAuthSigningKey(async () => {
     const oldKeys = await generateRSAKeys()
     const newKeys = await generateRSAKeys()
@@ -539,7 +612,7 @@ Deno.test('exchangeServiceCredential: retiring old key rejects it, new key works
       privateKey: btoa(oldKeys.privateKey),
       keyId: 'key1',
     })
-    await assertRejects(() => exchangeServiceCredential(oldAssertion))
+    await assertRejects(() => exchangeServiceCredentialBase(oldAssertion))
 
     // The new key still works — retiring key1 doesn't disturb key2.
     const newAssertion = await createServiceAssertion({
@@ -547,14 +620,14 @@ Deno.test('exchangeServiceCredential: retiring old key rejects it, new key works
       privateKey: btoa(newKeys.privateKey),
       keyId: 'key2',
     })
-    const credential = await exchangeServiceCredential(newAssertion)
+    const credential = await exchangeServiceCredentialBase(newAssertion)
     assertEquals(credential.serviceId, SERVICE_ID)
 
     Deno.env.delete(`JWK_PUB_${SERVICE_ID}_key2`)
   })
 })
 
-Deno.test('exchangeServiceCredential: one key cannot authenticate as another service', async () => {
+Deno.test('exchangeServiceCredentialBase: a key cannot auth as another service', async () => {
   const { privateKey, publicKey } = await generateRSAKeys()
   // Registered under "service-a"'s key1...
   Deno.env.set('JWK_PUB_service-a_key1', btoa(publicKey))
@@ -567,12 +640,12 @@ Deno.test('exchangeServiceCredential: one key cannot authenticate as another ser
     keyId: 'key1',
   })
 
-  await assertRejects(() => exchangeServiceCredential(assertion))
+  await assertRejects(() => exchangeServiceCredentialBase(assertion))
 
   Deno.env.delete('JWK_PUB_service-a_key1')
 })
 
-Deno.test('exchangeServiceCredential: rotating a key leaves minted tokens valid', async () => {
+Deno.test('exchangeServiceCredentialBase: rotating a key leaves minted tokens valid', async () => {
   await withAuthSigningKey(async () => {
     const oldKeys = await generateRSAKeys()
     Deno.env.set(`JWK_PUB_${SERVICE_ID}_key1`, btoa(oldKeys.publicKey))
@@ -582,7 +655,7 @@ Deno.test('exchangeServiceCredential: rotating a key leaves minted tokens valid'
       privateKey: btoa(oldKeys.privateKey),
       keyId: 'key1',
     })
-    const credential = await exchangeServiceCredential(assertion)
+    const credential = await exchangeServiceCredentialBase(assertion)
 
     // Rotate: key1 is retired entirely (a new key2 takes over, or nothing replaces it at all —
     // either way, key1 is gone).
@@ -599,3 +672,61 @@ Deno.test('exchangeServiceCredential: rotating a key leaves minted tokens valid'
     assertEquals(payload.sub, SERVICE_ID)
   })
 })
+
+// ── The real, exported entry point: exchangeServiceCredential wraps the Base above ──
+
+Deno.test(
+  'exchangeServiceCredential: a valid assertion mints a real credential, same as the Base',
+  async () => {
+    await withAuthSigningKey(async () => {
+      const { privateKey, publicKey } = await generateRSAKeys()
+      Deno.env.set(`JWK_PUB_${SERVICE_ID}`, btoa(publicKey))
+
+      const assertion = await createServiceAssertion({
+        serviceId: SERVICE_ID,
+        privateKey: btoa(privateKey),
+      })
+      const credential = await exchangeServiceCredential(assertion)
+
+      assertEquals(credential.serviceId, SERVICE_ID)
+      assert(credential.expiresIn > 0)
+
+      Deno.env.delete(`JWK_PUB_${SERVICE_ID}`)
+    })
+  },
+)
+
+Deno.test(
+  'exchangeServiceCredential: a garbage assertion rejects with HttpError(BAD_REQUEST), never a ' +
+    'bare PermissionDenied',
+  async () => {
+    const error = await assertRejects(
+      () => exchangeServiceCredential('not-a-real-assertion'),
+      HttpError,
+    )
+    assertEquals(error.status.value, 400)
+  },
+)
+
+Deno.test(
+  'exchangeServiceCredential: an assertion with the wrong signature also rejects with ' +
+    'HttpError(BAD_REQUEST) — the same Base failure, wrapped',
+  async () => {
+    const { publicKey } = await generateRSAKeys()
+    const { privateKey: wrongPrivateKey } = await generateRSAKeys()
+    Deno.env.set(`JWK_PUB_${SERVICE_ID}`, btoa(publicKey))
+
+    const assertion = await createServiceAssertion({
+      serviceId: SERVICE_ID,
+      privateKey: btoa(wrongPrivateKey),
+    })
+
+    const error = await assertRejects(
+      () => exchangeServiceCredential(assertion),
+      HttpError,
+    )
+    assertEquals(error.status.value, 400)
+
+    Deno.env.delete(`JWK_PUB_${SERVICE_ID}`)
+  },
+)

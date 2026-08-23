@@ -1,7 +1,12 @@
 // deno-lint-ignore-file no-explicit-any
 import { assert, assertEquals, assertFalse, assertRejects } from '@std/assert'
 import { HttpError } from '@zanix/errors'
-import { revokeAppTokens, revokeSessionToken } from 'utils/sessions/revoke.ts'
+import {
+  revokeAppTokens,
+  revokeAppTokensBase,
+  revokeSessionToken,
+  revokeSessionTokenBase,
+} from 'utils/sessions/revoke.ts'
 import { createJWT } from '@zanix/auth'
 
 console.warn = () => {}
@@ -16,7 +21,7 @@ Deno.test('Create access token with correct local session', async () => {
     rateLimit: 100,
     aud: ['admin'],
   }, 'my-secret')
-  const payload = await revokeSessionToken({ locals } as any, {
+  const payload = await revokeSessionTokenBase({ locals } as any, {
     token,
     cache: { local: { set: () => {} } } as any,
   })
@@ -36,15 +41,15 @@ Deno.test('Create access token with correct local session', async () => {
   assert(locals.session.payload.iss)
 })
 
-Deno.test('revokeAppTokens returns an empty array when tokenInfo is falsy', async () => {
-  const result = await revokeAppTokens(
+Deno.test('revokeAppTokensBase returns an empty array when tokenInfo is falsy', async () => {
+  const result = await revokeAppTokensBase(
     undefined as unknown as string,
     {} as any,
   )
   assertEquals(result, [])
 })
 
-Deno.test('revokeAppTokens accepts a single token string (non-array branch)', async () => {
+Deno.test('revokeAppTokensBase accepts a single token string (non-array branch)', async () => {
   Deno.env.set('JWT_KEY', 'my secret')
   Deno.env.delete('REDIS_URI')
 
@@ -54,14 +59,14 @@ Deno.test('revokeAppTokens accepts a single token string (non-array branch)', as
   )
   const cache = { local: { set: () => {} } } as any
 
-  const [payload] = await revokeAppTokens(token, cache)
+  const [payload] = await revokeAppTokensBase(token, cache)
 
   assert(payload.jti)
 
   Deno.env.delete('JWT_KEY')
 })
 
-Deno.test('revokeSessionToken reads the refresh token from cookies when omitted', async () => {
+Deno.test('revokeSessionTokenBase reads the refresh token from cookies when omitted', async () => {
   Deno.env.set('JWT_KEY', 'my secret')
   Deno.env.delete('REDIS_URI')
 
@@ -71,7 +76,7 @@ Deno.test('revokeSessionToken reads the refresh token from cookies when omitted'
   )
   const cache = { local: { set: () => {} } } as any
 
-  const payload = await revokeSessionToken(
+  const payload = await revokeSessionTokenBase(
     { locals: {}, cookies: { 'X-Znx-App-Token': token } } as any,
     { cache },
   )
@@ -81,17 +86,17 @@ Deno.test('revokeSessionToken reads the refresh token from cookies when omitted'
   Deno.env.delete('JWT_KEY')
 })
 
-Deno.test('revokeSessionToken throws when there is no token to revoke', async () => {
+Deno.test('revokeSessionTokenBase throws when there is no token to revoke', async () => {
   await assertRejects(
     () =>
-      revokeSessionToken({ locals: {}, cookies: {} } as any, {
+      revokeSessionTokenBase({ locals: {}, cookies: {} } as any, {
         cache: {} as any,
       }),
     HttpError,
   )
 })
 
-Deno.test('revokeSessionToken also revokes the token already stored in ctx.session', async () => {
+Deno.test('revokeSessionTokenBase also revokes the token stored in ctx.session', async () => {
   Deno.env.set('JWT_KEY', 'my secret')
   Deno.env.delete('REDIS_URI')
 
@@ -114,7 +119,7 @@ Deno.test('revokeSessionToken also revokes the token already stored in ctx.sessi
     },
   } as any
 
-  const payload = await revokeSessionToken(
+  const payload = await revokeSessionTokenBase(
     { locals: {}, cookies: {}, session: { token: sessionToken } } as any,
     { token, cache },
   )
@@ -124,3 +129,46 @@ Deno.test('revokeSessionToken also revokes the token already stored in ctx.sessi
 
   Deno.env.delete('JWT_KEY')
 })
+
+// ── The real, exported entry points: revokeAppTokens/revokeSessionToken wrap the Bases above ──
+
+Deno.test(
+  'revokeAppTokens: a malformed token rejects with HttpError(BAD_REQUEST), never a bare ' +
+    'PermissionDenied',
+  async () => {
+    const error = await assertRejects(
+      () => revokeAppTokens('not-a-real-token', {} as any),
+      HttpError,
+    )
+    assertEquals(error.status.value, 400)
+  },
+)
+
+Deno.test('revokeAppTokens: a valid token revokes, same as the Base', async () => {
+  Deno.env.set('JWT_KEY', 'my secret')
+  Deno.env.delete('REDIS_URI')
+
+  const token = await createJWT({ exp: 10, sub: 'mock@example.com' }, 'my secret')
+  const cache = { local: { set: () => {} } } as any
+
+  const [payload] = await revokeAppTokens(token, cache)
+  assert(payload.jti)
+
+  Deno.env.delete('JWT_KEY')
+})
+
+Deno.test(
+  'revokeSessionToken: a malformed token rejects with HttpError(BAD_REQUEST), never a bare ' +
+    'PermissionDenied',
+  async () => {
+    const error = await assertRejects(
+      () =>
+        revokeSessionToken({ locals: {}, cookies: {} } as any, {
+          token: 'not-a-real-token',
+          cache: {} as any,
+        }),
+      HttpError,
+    )
+    assertEquals(error.status.value, 400)
+  },
+)

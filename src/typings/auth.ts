@@ -67,6 +67,16 @@ export type GenerateOTPOptions = {
   length?: number
 }
 
+/** Options for verifying a one-time password via {@link OtpFlow.verify}/{@link OtpFlow.authenticate}. */
+export type VerifyOTPOptions = {
+  /**
+   * How many wrong guesses this OTP tolerates before it's burned outright (deleted, rejected even
+   * if it hasn't actually expired yet) — the brute-force guard for a short numeric code. Optional;
+   * defaults to `5`.
+   */
+  maxAttempts?: number
+}
+
 /** Options used to generate a pair of session tokens for a given subject. */
 export type AuthSessionOptions = {
   /** User or API Id. */
@@ -107,6 +117,8 @@ export type OtpFlow = {
      * The one-time password (OTP) code that the user provides for verification.
      */
     code: string,
+    /** Optional verification options — currently just `maxAttempts`. */
+    options?: VerifyOTPOptions,
   ) => Promise<boolean>
   /**
    * Performs the full OTP authentication flow and initializes
@@ -124,6 +136,8 @@ export type OtpFlow = {
     code: string,
     /** Optional configuration for customizing the generated local session */
     sessionOptions?: Partial<AuthSessionOptions>,
+    /** Optional verification options — currently just `maxAttempts`. */
+    verifyOptions?: VerifyOTPOptions,
   ) => Promise<SessionTokens>
 }
 
@@ -244,11 +258,15 @@ export type OAuthFlow<U> = {
    * @param {string} [options.state] - A random string to maintain state between request and callback.
    *                           Defaults to a newly generated UUID.
    * @param {string} [options.scope] - OAuth scopes to request.
+   * @param {'token' | 'code'} [options.responseType] - Overrides the connector's own configured
+   *                           `responseType` for just this call — e.g. requesting the
+   *                           authorization-code flow from one call site while another still uses
+   *                           the connector's own default.
    *
    * @returns The generated OAuth URL along with the `state` used to build it.
    */
   generateAuthUrl: (
-    options?: { state?: string; scope?: string },
+    options?: { state?: string; scope?: string; responseType?: 'token' | 'code' },
   ) => { url: string; state: string }
   /**
    * Verifies a OAuth token and retrieves the associated user information.
@@ -256,6 +274,18 @@ export type OAuthFlow<U> = {
    * @returns { Promise<U>} The associated user information.
    */
   validateToken: (token: string) => Promise<U>
+  /**
+   * {@link OAuthFlow.validateToken}'s own authorization-code-flow counterpart: exchanges `code`
+   * for a real access token server-side, then retrieves the associated user info with it — the
+   * token behind that lookup is provably scoped to this app by construction, unlike a token
+   * `validateToken` receives directly from the client. The direct, one-line replacement for
+   * `validateToken(token)` in a flow that builds its own session afterward (permissions, a custom
+   * payload, its own DB writes) instead of using {@link OAuthFlow.authenticate}'s generic one.
+   *
+   * @param code - The authorization code from the provider's redirect.
+   * @returns The user info, same shape {@link OAuthFlow.validateToken} returns.
+   */
+  validateCode: (code: string) => Promise<U>
   /**
    * Performs the full OAuth flow and initializes
    * the local session for the authenticated user.
@@ -274,6 +304,24 @@ export type OAuthFlow<U> = {
    */
   authenticate: (
     token: string,
+    sessionOptions?: Partial<AuthSessionOptions>,
+  ) => Promise<{
+    user: U
+    session: SessionTokens
+  }>
+  /**
+   * The authorization-code flow's own entry point — exchanges `code` for a real access token
+   * server-side (using this connector's own client secret), then runs the same session-creation
+   * logic {@link OAuthFlow.authenticate} does. Recommended over `authenticate()` wherever the
+   * provider supports it: the token this hands off is provably scoped to this app by
+   * construction, unlike a token `authenticate()` receives directly from the client.
+   *
+   * @param {string} code - The authorization code from the provider's redirect (`?code=...`).
+   * @param {AuthSessionOptions} [sessionOptions={}] - Same as {@link OAuthFlow.authenticate}.
+   * @returns Same shape as {@link OAuthFlow.authenticate}.
+   */
+  authenticateWithCode: (
+    code: string,
     sessionOptions?: Partial<AuthSessionOptions>,
   ) => Promise<{
     user: U

@@ -17,6 +17,7 @@ import logger from '@zanix/logger'
  * @param {string} [options.aud] - The expected audience of the token. If provided, it will validate that the `aud` claim in the token matches this value.
  * @param {JWTOptions['algorithm']} [options.algorithm] - The expected signing algorithm of the token (e.g., 'RS256', 'HS256', 'HS384'). Defaults to `HS256`
  * @param {JWTOptions['encryptionKey']} [options.encryptionKey] - The key used to encrypt or protect the payload's sensitive data. Required on RSA.
+ * @param {boolean} [options.requireExp] - Whether a token with no `exp` claim at all is rejected. Defaults to `true` — pass `false` only for a token deliberately meant to never expire.
  *
  * @throws {Error} Throws an error if the JWT is not valid.
  *
@@ -42,6 +43,7 @@ export const verifyJWT = async (
     aud,
     sub,
     encryptionKey,
+    requireExp = true,
   } = options
   const [encodedHeader, encodedPayload, encodedSignature] = token.split('.')
 
@@ -97,7 +99,15 @@ export const verifyJWT = async (
   // Check for expiration (exp)
   const currentTime = Math.floor(Date.now() / 1000)
 
-  if (payload.exp && currentTime > payload.exp) {
+  if (payload.exp === undefined) {
+    if (requireExp) {
+      throw new PermissionDenied('Token is missing an expiration claim', {
+        code: 'MISSING_TOKEN_EXPIRATION',
+        cause: 'The token has no exp claim, so it can never be checked for expiration.',
+        meta: { source: 'zanix' },
+      })
+    }
+  } else if (currentTime > payload.exp) {
     throw new PermissionDenied('Token has expired', {
       code: 'EXPIRED_TOKEN',
       cause: 'The token expiration time has passed.',

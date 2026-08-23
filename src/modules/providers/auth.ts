@@ -1,4 +1,9 @@
-import type { AuthConnectors, CoreAuthConnectors, GoogleUserInfo } from 'typings/connectors.ts'
+import type {
+  AuthConnectors,
+  CoreAuthConnectors,
+  GitHubUserInfo,
+  GoogleUserInfo,
+} from 'typings/connectors.ts'
 import type { OAuthFlow, OtpFlow, SessionFlow, TotpFlow } from 'typings/auth.ts'
 import type { CoreModules } from '@zanix/server'
 
@@ -8,13 +13,14 @@ import { session } from './extensions/session.ts'
 import { otp } from './extensions/otp.ts'
 import { totp } from './extensions/totp.ts'
 import { google } from './extensions/google.ts'
+import { github } from './extensions/github.ts'
 
 /**
  * Abstract base for the `'auth'` core-provider slot (see `providers/core.ts`) — owned by
  * `@zanix/auth`, not `@zanix/server`. Unlike the 6 slots with a dedicated `CoreBaseClass` getter
  * (`cache`, `database`, `asyncmq`, `worker`, `kvLocal`, `search`), auth has no such getter, so
  * nothing in `@zanix/server`'s own source needs to import this type — it's a purely empty marker
- * class whose only job is to give `@Provider({ type: 'auth' })`'s `instanceof` check
+ * class whose only job is to give `@Provider({ slot: 'auth' })`'s `instanceof` check
  * (`defineProviderDecorator`) something to validate concrete implementations against.
  *
  * @abstract
@@ -63,6 +69,21 @@ export class ZanixAuthProvider extends ZanixCoreAuthProvider {
    * ```
    */
   public google: OAuthFlow<GoogleUserInfo> = google.call(this)
+
+  /**
+   * GitHub OAuth2 authentication connector.
+   *
+   * Provides methods for generating the GitHub auth URL, retrieving user info from
+   * an access token, and completing the local sign-in session. Unlike `.google`, GitHub's own
+   * OAuth2 implementation has no implicit flow — use `.authenticateWithCode()`/`.validateCode()`,
+   * never `.authenticate()`/`.validateToken()` with a token obtained any other way.
+   *
+   * @example
+   * ```ts
+   * const { user, session } = await authProvider.github.authenticateWithCode(code);
+   * ```
+   */
+  public github: OAuthFlow<GitHubUserInfo> = github.call(this)
 
   /**
    * One-Time Password (OTP) authentication connector.

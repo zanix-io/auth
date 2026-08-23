@@ -27,14 +27,18 @@ registerCoreProviderSlot('auth', ZanixCoreAuthProvider, {
  * silently fail to find it, since `getTargetKey` assigns each class reference — the wrapper and
  * `ZanixAuthProvider` — its own distinct identity.
  */
-const registerProvider = () => {
+// Exported (not just auto-run below) — kept consistent with every other `core.ts` loader's own
+// callable, re-invokable registration function across the Zanix ecosystem (see
+// `@zanix/datamaster`'s `storage/core.ts`'s own `registerSeaweedFSConnector` doc for the full
+// reasoning that pattern exists for).
+export const registerAuthProvider = (): void => {
   Provider({ slot: 'auth', lifetime: 'SCOPED' })(ZanixAuthProvider)
 }
 
 /**
  * Core Auth provider loader for Zanix.
  *
- * This module automatically registers the default auth provider (`_ZanixAuthProvider`) under the
+ * This module automatically registers the default auth provider (`ZanixAuthProvider`) under the
  * `'auth'` core-provider key — the same zero-config pattern AsyncMQ already uses for its `'worker'`
  * provider — so it's available via `this.providers.get('auth')` without any app-side setup.
  *
@@ -46,6 +50,6 @@ const registerProvider = () => {
  *
  * @module
  */
-const zanixAuthProvider: void = registerProvider()
+const zanixAuthProvider: void = registerAuthProvider()
 
 export default zanixAuthProvider

@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertFalse, assertMatch, assertNotEquals } from '@std/assert'
 import { generateTOTP, generateTOTPSecret, getTOTPProvisioningUri, verifyTOTP } from 'utils/totp.ts'
+import { base32Decode } from '@zanix/helpers'
 
 // RFC 6238 Appendix B test vector: ASCII secret "12345678901234567890", SHA-1, 8 digits.
 // Base32-encoding that ASCII secret ourselves (via generateTOTPSecret's own alphabet) lets us
@@ -16,6 +17,35 @@ Deno.test('generateTOTPSecret() returns a unique Base32 string of the expected l
 
   const shortSecret = generateTOTPSecret(10)
   assertEquals(shortSecret.length, 16) // 10 bytes -> 16 base32 chars
+})
+
+/**
+ * Regression coverage for a confirmed defense: `generateTOTPSecret` fills its bytes with the real
+ * `crypto.getRandomValues` Web Crypto CSPRNG — never `Math.random()` or a predictable source.
+ * `crypto.getRandomValues` is stubbed with a controlled, deterministic byte sequence; decoding the
+ * resulting secret back to bytes (via `base32Decode`, the exact inverse of what
+ * `generateTOTPSecret` itself calls) and comparing it to the stubbed bytes proves the secret
+ * genuinely derives from whatever the Web Crypto API produced.
+ */
+Deno.test({
+  name: 'generateTOTPSecret() derives its bytes from crypto.getRandomValues, not Math.random',
+  fn: () => {
+    const stubBytes = Array.from({ length: 20 }, (_, i) => (i * 7) % 256)
+    const original = crypto.getRandomValues.bind(crypto)
+    crypto.getRandomValues = (<T extends ArrayBufferView | null>(arr: T): T => {
+      const view = arr as unknown as Uint8Array
+      for (let i = 0; i < view.length; i++) view[i] = stubBytes[i]
+      return arr
+    }) as Crypto['getRandomValues']
+
+    try {
+      const secret = generateTOTPSecret()
+      const decoded = Array.from(new Uint8Array(base32Decode(secret)))
+      assertEquals(decoded, stubBytes)
+    } finally {
+      crypto.getRandomValues = original
+    }
+  },
 })
 
 Deno.test('getTOTPProvisioningUri() defaults the issuer to DEFAULT_AUTH_ISSUER', () => {

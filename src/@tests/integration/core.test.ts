@@ -2,9 +2,11 @@
 import { assert, assertStrictEquals, assertThrows } from '@std/assert'
 import { ProgramModule } from '@zanix/server'
 import { GoogleOAuth2Connector } from 'modules/connectors/google/mod.ts'
+import { GitHubOAuth2Connector } from 'modules/connectors/github/mod.ts'
 import { ZanixAuthProvider } from 'modules/providers/auth.ts'
 
 const googleConnectorRef = GoogleOAuth2Connector as any
+const githubConnectorRef = GitHubOAuth2Connector as any
 
 console.error = () => {}
 
@@ -55,17 +57,47 @@ Deno.test('connectors/google/core.ts registers the connector when envars are set
   Deno.env.delete('GOOGLE_OAUTH2_REDIRECT_URI')
 })
 
+Deno.test('connectors/github/core.ts skips registration without a client ID', async () => {
+  Deno.env.delete('GITHUB_OAUTH2_CLIENT_ID')
+
+  await import('modules/connectors/github/core.ts')
+
+  assertThrows(() => ProgramModule.connectors.get(githubConnectorRef))
+})
+
+Deno.test('connectors/github/core.ts registers the connector when envars are set', async () => {
+  Deno.env.set('GITHUB_OAUTH2_CLIENT_ID', 'test-id')
+  Deno.env.set('GITHUB_OAUTH2_CLIENT_SECRET', 'test-secret')
+  Deno.env.set('GITHUB_OAUTH2_REDIRECT_URI', 'https://example.com/cb')
+
+  await import('modules/connectors/github/core.ts?with-env')
+
+  const connector = ProgramModule.connectors.get(githubConnectorRef)
+  assert(connector)
+
+  Deno.env.delete('GITHUB_OAUTH2_CLIENT_ID')
+  Deno.env.delete('GITHUB_OAUTH2_CLIENT_SECRET')
+  Deno.env.delete('GITHUB_OAUTH2_REDIRECT_URI')
+})
+
 Deno.test('modules/core.ts aggregates all core registrations', async () => {
   Deno.env.set('GOOGLE_OAUTH2_CLIENT_ID', 'test-id')
   Deno.env.set('GOOGLE_OAUTH2_CLIENT_SECRET', 'test-secret')
   Deno.env.set('GOOGLE_OAUTH2_REDIRECT_URI', 'https://example.com/cb')
+  Deno.env.set('GITHUB_OAUTH2_CLIENT_ID', 'test-id')
+  Deno.env.set('GITHUB_OAUTH2_CLIENT_SECRET', 'test-secret')
+  Deno.env.set('GITHUB_OAUTH2_REDIRECT_URI', 'https://example.com/cb')
 
   await import('modules/core.ts')
 
   assert(ProgramModule.providers.get('auth'))
   assert(ProgramModule.connectors.get(googleConnectorRef))
+  assert(ProgramModule.connectors.get(githubConnectorRef))
 
   Deno.env.delete('GOOGLE_OAUTH2_CLIENT_ID')
   Deno.env.delete('GOOGLE_OAUTH2_CLIENT_SECRET')
   Deno.env.delete('GOOGLE_OAUTH2_REDIRECT_URI')
+  Deno.env.delete('GITHUB_OAUTH2_CLIENT_ID')
+  Deno.env.delete('GITHUB_OAUTH2_CLIENT_SECRET')
+  Deno.env.delete('GITHUB_OAUTH2_REDIRECT_URI')
 })
