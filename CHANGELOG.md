@@ -28,7 +28,6 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
   only `@zanix/server`'s own types, never `@zanix/datamaster`'s real Redis connector code) — so this
   package's production code now has one genuine, permanent `@zanix/datamaster/cache/types` entry in
   its own top-level `imports`, deliberately kept separate from the test-only `scopes` entry above.
-  See `deno-lazy-dependency-pattern`.
 
 ## [0.8.0] - 2026-08-23
 
