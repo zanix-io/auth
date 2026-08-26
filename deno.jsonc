@@ -66,15 +66,6 @@
     "utils/": "./src/utils/",
     "modules/": "./src/modules/"
   },
-  // `@zanix/datamaster` is a test-only dependency, not a production one: no file under `src/modules/`,
-  // `src/utils/`, or `src/typings/` imports it — real code only ever documents the pattern parity with
-  // `@zanix/datamaster`'s own `core.ts` loaders in a comment, never imports the package itself. Only
-  // `src/@tests/functional/**` dynamically imports `@zanix/datamaster/core` to load a real cache
-  // implementation for rate-limit/block-list/OTP assertions. A bare top-level `imports` entry for it
-  // would be `nodeModulesDir: "auto"`-materialized (`mongoose`/`redis`/`@aws-sdk/*`) for every
-  // `deno check`/`deno test` run against this repo regardless of that reachability — scoping it to the
-  // test directory keeps this package's own dev footprint honest instead. Same pattern already used by
-  // `@zanix/asyncmq` and `@zanix/app`'s own `deno.jsonc`. See `deno-lazy-dependency-pattern`.
   "scopes": {
     "./src/@tests/": {
       "@zanix/datamaster": "jsr:@zanix/datamaster@^1.6.0",
