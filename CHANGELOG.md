@@ -7,6 +7,29 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-25
+
+### Fixed
+
+- **This package's own top-level `imports` map declared bare
+  `@zanix/datamaster`/`@zanix/datamaster/core` unconditionally, even though both are test-only** —
+  only `src/@tests/functional/**` imports them, to exercise rate-limit/block-list/OTP assertions
+  against a real cache implementation. An unused `jsr:`-backed alias sitting in a project's own
+  top-level `imports` map is `nodeModulesDir: "auto"`- materialized
+  (`mongoose`/`redis`/`@aws-sdk/*`) regardless of reachability, for every `deno check`/`deno test`
+  run against this repo, even one that never touches a test file. Both now resolve only within a
+  `scopes` entry restricted to `src/@tests/`, matching the pattern already used by `@zanix/asyncmq`
+  and `@zanix/app`'s own `deno.jsonc`.
+- **`checkRateLimit`'s own `cache` parameter typed itself as `ZanixCacheProvider`
+  (`@zanix/server`)**, a provider-shaped type generic enough that a caller like `rateLimitGuard`
+  needed a real, narrower cache-connector type to type `ctx.providers.get('cache')` precisely.
+  Retyped to `ControlPlaneCacheModules`, imported from `@zanix/datamaster`'s own `./cache/types`
+  subpath — confirmed narrow and Redis-free (a plain type contract, `ZanixRedisClientLike`, reaching
+  only `@zanix/server`'s own types, never `@zanix/datamaster`'s real Redis connector code) — so this
+  package's production code now has one genuine, permanent `@zanix/datamaster/cache/types` entry in
+  its own top-level `imports`, deliberately kept separate from the test-only `scopes` entry above.
+  See `deno-lazy-dependency-pattern`.
+
 ## [0.8.0] - 2026-08-23
 
 ### Added

@@ -1,5 +1,5 @@
 import type { CheckRateLimitResult } from 'typings/sessions.ts'
-import type { ZanixCacheProvider } from '@zanix/server'
+import type { ControlPlaneCacheModules } from '@zanix/datamaster/cache/types'
 
 import { RATE_LIMIT } from 'utils/lua.ts'
 import { REDIS_URI_ENV } from 'utils/constants.ts'
@@ -31,12 +31,15 @@ let rateLimitPlanMap: Map<number, number>
  *   attempts tracked before the failure counter is reset. Defaults to `3`.
  * @throws {Error} Throws if an error occurs while accessing or updating the rate limit data.
  */
-export async function checkRateLimit(cache: ZanixCacheProvider, options: {
-  key: string
-  maxRequests: number
-  windowSeconds: number
-  maxFaildedAttempts?: number
-}) {
+export async function checkRateLimit(
+  cache: ControlPlaneCacheModules,
+  options: {
+    key: string
+    maxRequests: number
+    windowSeconds: number
+    maxFaildedAttempts?: number
+  },
+) {
   const { key, maxRequests, windowSeconds, maxFaildedAttempts = 3 } = options
   const failedAttemptsKey = `${key}:failed-attempts`
 

@@ -1,5 +1,6 @@
 import type { RateLimitsOptions } from 'typings/sessions.ts'
 import { httpErrorResponse, type MiddlewareGlobalGuard, RATE_LIMIT_HEADERS } from '@zanix/server'
+import type { ControlPlaneCacheModules } from '@zanix/datamaster/cache/types'
 
 import { checkRateLimit, getRateLimitForSession } from 'utils/sessions/rate-limit.ts'
 import {
@@ -132,7 +133,7 @@ export const rateLimitGuard = (
     const key = `${CACHE_KEYS.rateLimit}:${app ? `${app}-${sessionId}` : sessionId}`
 
     const { count, createdAt, canContinue, failedAttempts } = await checkRateLimit(
-      ctx.providers.get('cache'),
+      ctx.providers.get<ControlPlaneCacheModules>('cache'),
       { key, windowSeconds, maxRequests: getRateLimitForSession(rateLimit) },
     )
 
