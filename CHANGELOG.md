@@ -7,6 +7,25 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-31
+
+### Added
+
+- **`attachRotatedSessionToError`/`recoverRotatedSessionCookie`**
+  (`utils/sessions/rotation-recovery.ts`) — recovers a refresh-token cookie a guard's own
+  `refreshSessionTokens` call already rotated and blocklisted, for a request where a LATER
+  guard/pipe in the same chain throws (a permission check failing, most commonly). `@zanix/server`'s
+  own guard pipeline skips its registered response interceptors on a guard-thrown error, so
+  `sessionHeadersInterceptor` never gets the chance to deliver that replacement cookie the normal
+  way — leaving the client stranded on a now-blocklisted token with no successor delivered.
+  `attachRotatedSessionToError(error, ctx)`, called from inside a guard's own `catch` right before
+  re-throwing, marks the caught error with the already-rotated session;
+  `recoverRotatedSessionCookie()` — an `onError`-shaped recovery function, composable via
+  `@zanix/space`'s own `globalErrorHandler` alongside `createNotFoundHandler()` — reads that marker
+  back and delivers the cookie on the error response itself. Rebuilds the cookie via this package's
+  own `getSessionHeaders`, never a hand-rolled string, so its attributes stay identical to every
+  other path that already sets it.
+
 ## [0.8.1] - 2026-08-25
 
 ### Fixed

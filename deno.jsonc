@@ -1,6 +1,6 @@
 {
   "name": "@zanix/auth",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "nodeModulesDir": "auto",
   "zanix": {
     "project": "library"
@@ -61,7 +61,7 @@
     "@zanix/helpers": "jsr:@zanix/utils@^4.0.0/helpers",
     "@zanix/validator": "jsr:@zanix/utils@^4.0.0/validator",
     "@zanix/types": "jsr:@zanix/utils@^4.0.0/types",
-    "@zanix/datamaster/cache/types": "jsr:@zanix/datamaster@^1.7.0/cache/types",
+    "@zanix/datamaster/cache/types": "jsr:@zanix/datamaster@^1.9.0/cache/types",
     "typings/": "./src/typings/",
     "utils/": "./src/utils/",
     "modules/": "./src/modules/"

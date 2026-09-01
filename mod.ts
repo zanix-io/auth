@@ -115,6 +115,10 @@ export {
 } from 'utils/sessions/revoke.ts'
 export { refreshSessionTokens, refreshSessionTokensBase } from 'utils/sessions/refresh.ts'
 export {
+  attachRotatedSessionToError,
+  recoverRotatedSessionCookie,
+} from 'utils/sessions/rotation-recovery.ts'
+export {
   createAccessToken,
   createAppToken,
   createRefreshToken,
