@@ -38,7 +38,7 @@ Deno.test('HCaptchaAdapter: a transport failure is logged (metadata) and rethrow
   const transportError = new Error('network down')
   // @ts-ignore private override, same pattern as mockAdapter() above
   adapter.http = {
-    post: () => Promise.reject(transportError),
+    post: <T>() => Promise.reject(transportError) as T,
   }
 
   const error = await assertRejects(() => adapter.verify('client-token'))

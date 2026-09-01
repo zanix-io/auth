@@ -94,6 +94,10 @@ It provides a **unified and extensible system** for:
     (`sub`, `session`, `token`), for consumers that need to reference them directly.
   - Also available bound to the default provider: `this.providers.get('auth').session` —
     `.generateTokens()`, `.refreshTokens()`, `.revokeToken()`.
+  - `attachRotatedSessionToError()`, `recoverRotatedSessionCookie()`: recover a refresh-token cookie
+    a guard's own `refreshSessionTokens()` call already rotated, for a request where a later
+    guard/pipe in the same chain throws — see
+    [Guard-Stage Rotation Recovery](./docs/configuration.md#-guard-stage-rotation-recovery).
 
 - **Service-Credential Exchange (Machine-to-Machine)**
   - `createServiceAssertion()`: a calling service signs a short-lived self-assertion with its own

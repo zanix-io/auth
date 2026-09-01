@@ -46,7 +46,7 @@ jobs:
           deno-version: v2.x
 
       - name: Run tests
-        run: deno test --allow-all
+        run: deno test --min-dep-age=0 --allow-all
 
       - name: Publish to Deno
         # `needs.ci.result == 'success'` is explicit, not just relying on the default `needs:`

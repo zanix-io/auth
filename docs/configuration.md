@@ -10,6 +10,7 @@ headers/cookies `@zanix/auth` manages for you.
 3. [Captcha (Anti-bot Verification)](#-captcha-anti-bot-verification)
 4. [Key Rotation](#-key-rotation)
 5. [Session Response Headers](#-session-response-headers)
+6. [Guard-Stage Rotation Recovery](#-guard-stage-rotation-recovery)
 
 ---
 
@@ -182,6 +183,103 @@ When a valid session is present, the following headers may be added to the respo
 > These header names come from the `AUTH_HEADERS`/`SESSION_HEADERS`/`GENERAL_HEADERS` constants,
 > exported from `@zanix/server` (not from `@zanix/auth` itself) — see `@zanix/server`'s
 > `docs/configuration.md#auth--admin-protocol-headers` if you need the raw objects.
+
+### Cookie consent classification
+
+Unlike `@zanix/space`'s own cookies (`X-Znx-Lang`/`X-Znx-Population`/`X-Znx-Csrf` — see that
+package's own `docs/middleware.md#cookie-consent--suggested-classification`, all three of which are
+always set, with no opt-out), the four session cookies above are **already gated behind explicit
+consent** — `checkAcceptedCookies()` (`utils/sessions/headers.ts`) requires
+`X-Znx-Cookies-Accepted: true` (as a request header OR an already-set cookie) before
+`getSessionHeaders()` includes any `Set-Cookie` at all. Without it, a session still works —
+`x-znx-<type>-session-status`/`x-znx-<type>-id` are always sent as plain response headers — it just
+never persists across page loads; nothing here breaks by omission the way it would if `X-Znx-Csrf`
+were skipped.
+
+Suggested classification for a consuming app's own cookie-consent banner: **`X-Znx-App-Token` (the
+refresh token) is genuinely NOT "strictly necessary"** — the whole point of gating it is that the
+app keeps working without it, only losing cross-visit persistence. Its `HttpOnly` flag is deliberate
+(it's a bearer credential; exposing it to JS via `localStorage` instead would reopen the exact XSS
+exposure `HttpOnly` closes), so "just move it to `localStorage`" is not a safe alternative the way
+it might be for a non-sensitive value — the real reason it needs consent is that it enables
+identifying and persisting the SAME user across visits, the functional/preference-tier concern most
+cookie-law frameworks (GDPR/ePrivacy, CCPA, ...) require opt-in for, not a technical necessity this
+package could avoid by construction.
+
+The other three cookies in the same gated batch
+(`x-znx-<type>-session-status`/`x-znx-<type>-id`/`X-Znx-Cookies-Accepted` itself) ride along with
+the SAME `cookiesAccepted` check — a consuming app doesn't need to reason about each separately;
+accepting or rejecting is already all-or-nothing for this whole batch. `X-Znx-Cookies-Accepted`
+itself, once set, is the one exception worth naming explicitly: recording a "yes" is what most
+frameworks treat as strictly-necessary bookkeeping (the same reasoning that applies to any
+consent-banner's own remembered choice) — but note it only ever gets WRITTEN as a cookie here after
+a `true` request already arrived, so this package never sets it unprompted either.
+
+---
+
+## 🩹 Guard-Stage Rotation Recovery
+
+`refreshSessionTokens()` rotates the refresh token: it verifies the current one, mints a
+replacement, and — when `options.cache` is provided — blocklists the consumed token as part of the
+same call (single-use rotation, so a stolen token replayed after the legitimate client already
+refreshed is rejected, not silently accepted).
+
+**Known limitation when rotation runs inside a guard, and something later in the same guard chain
+throws** (a permission check failing, most commonly): `@zanix/server`'s guard pipeline skips its
+registered response interceptors whenever a GUARD throws — unlike a handler-body throw, whose own
+recovery path still runs interceptors. `sessionHeadersInterceptor` never gets the chance to deliver
+the replacement cookie, leaving the client holding a cookie that rotation itself already
+blocklisted, with the replacement computed but never sent.
+
+`attachRotatedSessionToError(error, ctx)` / `recoverRotatedSessionCookie()` close that gap for any
+consumer using this pattern — a guard combining `refreshSessionTokens()` with a later permission
+check, in a server-rendered, cookie-only-session app with no bearer-token access-token flow (e.g. an
+admin panel or dashboard gating a page by role):
+
+```ts
+import { attachRotatedSessionToError, refreshSessionTokens } from 'jsr:@zanix/auth'
+
+export function requireSession(roles: string[]): MiddlewareGuard {
+  return async (ctx) => {
+    await refreshSessionTokens(ctx, undefined, { cache })
+    try {
+      await requirePermissions(ctx)
+    } catch (error) {
+      throw attachRotatedSessionToError(error, ctx)
+    }
+    return {}
+  }
+}
+```
+
+Wire `recoverRotatedSessionCookie()` as `server.ssr.onError` — typically composed via
+`@zanix/space`'s own `globalErrorHandler()`, alongside that package's `createNotFoundHandler()`:
+
+```ts
+import { createNotFoundHandler, globalErrorHandler } from 'jsr:@zanix/space'
+import { recoverRotatedSessionCookie } from 'jsr:@zanix/auth'
+
+await bootstrapRemoteApp(spaceApp, {
+  server: {
+    ssr: {
+      onError: globalErrorHandler(recoverRotatedSessionCookie(), createNotFoundHandler()),
+    },
+  },
+})
+```
+
+`recoverRotatedSessionCookie()` rebuilds the response with this package's own
+`getSessionHeaders()`/`addHeadersToResponse()` — the same functions `sessionHeadersInterceptor`
+itself uses for a successful response — so the refresh-token cookie's attributes stay identical to
+every other path that sets it. It declines (returns `undefined`) for any error
+`attachRotatedSessionToError` never touched, so it composes safely with other error handlers.
+
+> The marker `attachRotatedSessionToError` attaches carries a live, valid refresh token. It's a
+> non-enumerable own property — invisible to `serializeError`/`console.error`/`JSON.stringify`/
+> object-spread, the same discretion `@zanix/server`'s own `attachRequestToError` applies to the
+> `Request` it attaches — but this is obscurity, not a hard access boundary:
+> `Object.getOwnPropertyNames`/`Reflect.ownKeys` still list it as a real own key. See the JSDoc on
+> `attachRotatedSessionToError` for the full account.
 
 ---
 
