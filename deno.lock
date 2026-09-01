@@ -29,10 +29,11 @@
     "jsr:@std/path@^1.1.5": "1.1.6",
     "jsr:@std/streams@~0.224.5": "0.224.5",
     "jsr:@std/testing@1.0.16": "1.0.16",
-    "jsr:@zanix/datamaster@^1.6.0": "1.7.0",
-    "jsr:@zanix/datamaster@^1.7.0": "1.7.0",
-    "jsr:@zanix/server@4": "4.0.0",
-    "jsr:@zanix/utils@4": "4.0.0",
+    "jsr:@zanix/datamaster@^1.6.0": "1.9.0",
+    "jsr:@zanix/datamaster@^1.9.0": "1.9.0",
+    "jsr:@zanix/server@4": "4.1.0",
+    "jsr:@zanix/utils@4": "4.1.0",
+    "jsr:@zanix/utils@^4.1.0": "4.1.0",
     "npm:mongoose@8": "8.24.4",
     "npm:redis@^5.9.0": "5.12.1"
   },
@@ -160,36 +161,26 @@
         "jsr:@std/data-structures"
       ]
     },
-    "@zanix/datamaster@1.6.0": {
-      "integrity": "93e422da093e25930b6b6ac9e3f936a8ae27d94710c463d45faa051d18648c86",
+    "@zanix/datamaster@1.9.0": {
+      "integrity": "e0ab74db8211ad67f731a0798fb9ebfc1f4943271b1894af68a4a3f2efacc142",
       "dependencies": [
         "jsr:@db/sqlite",
         "jsr:@zanix/server",
-        "jsr:@zanix/utils",
+        "jsr:@zanix/utils@4",
         "npm:mongoose",
         "npm:redis"
       ]
     },
-    "@zanix/datamaster@1.7.0": {
-      "integrity": "6715470ffb30bed484631d9900804c416e2fb4db3435b9c2877baad1fd7e39f3",
-      "dependencies": [
-        "jsr:@db/sqlite",
-        "jsr:@zanix/server",
-        "jsr:@zanix/utils",
-        "npm:mongoose",
-        "npm:redis"
-      ]
-    },
-    "@zanix/server@4.0.0": {
-      "integrity": "03117403ba5e0ee1575d4a0096282149d7b6a7e510f7a1572621958ea58fa3d8",
+    "@zanix/server@4.1.0": {
+      "integrity": "3ff98b49ec2d84cc8bd0db7be40175248e79d04f247664c209b37a4b9c92c518",
       "dependencies": [
         "jsr:@std/http",
         "jsr:@std/path@0.224",
-        "jsr:@zanix/utils"
+        "jsr:@zanix/utils@^4.1.0"
       ]
     },
-    "@zanix/utils@4.0.0": {
-      "integrity": "2ef04a760e011829ff14e198d6e5fc947ae0cf2615b519c1954ddb78b7b376e6",
+    "@zanix/utils@4.1.0": {
+      "integrity": "3b223433ddbfac0a33edf1a985092f5ea947ccaed0142f016495bec4e42dce9b",
       "dependencies": [
         "jsr:@std/fmt@0.224",
         "jsr:@std/path@0.224"
@@ -344,7 +335,7 @@
       "jsr:@std/path@0.224",
       "jsr:@std/testing@1.0.16",
       "jsr:@zanix/datamaster@^1.6.0",
-      "jsr:@zanix/datamaster@^1.7.0",
+      "jsr:@zanix/datamaster@^1.9.0",
       "jsr:@zanix/server@4",
       "jsr:@zanix/utils@4"
     ]
