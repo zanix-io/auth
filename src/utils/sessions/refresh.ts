@@ -1,5 +1,6 @@
 import type { SessionTokens } from 'typings/sessions.ts'
 import type { JWTPayload } from 'typings/jwt.ts'
+import type { AuthSessionOptions } from 'typings/auth.ts'
 
 import {
   type ScopedContext,
@@ -19,7 +20,9 @@ import { toJwtHttpError } from '../jwt/verification-error.ts'
  * Refreshes the session tokens using the provided JWT.
  *
  * Verifies the given refresh token, then generates a new set of session tokens based on the
- * access data embedded in its payload. When `options.cache` is provided, the consumed refresh
+ * access data embedded in its payload — merged with `options.sessionOptions`, when given, so a
+ * caller can re-resolve fields like `permissions` (e.g. after a role change) instead of reusing
+ * whatever was true at the original login. When `options.cache` is provided, the consumed refresh
  * token is blocklisted as part of this same call (single-use rotation) — a later attempt to
  * refresh with that same token is then rejected as blocklisted, the mechanism that also catches a
  * stolen token being replayed after the legitimate client already rotated past it.
@@ -35,6 +38,9 @@ import { toJwtHttpError } from '../jwt/verification-error.ts'
  * @param options - Options for check block list validation
  * @param {ZanixCacheProvider} [options.cache] - Cache provider.
  * @param {ZanixKVConnector} [options.kvDb] - Key-value store connector.
+ * @param {Partial<AuthSessionOptions>} [options.sessionOptions] - Fields overriding the
+ *   `AuthSessionOptions` originally embedded in the refresh token (e.g. freshly resolved
+ *   `permissions`), shallow-merged over it before the new tokens are generated.
  * @returns {Promise<SessionTokens & { oldToken: string, payload: JWTPayload }>>}
  *   A promise that resolves with the newly generated session tokens and de older one.
  */
@@ -44,6 +50,7 @@ export const refreshSessionTokensBase = async (
   options: {
     cache?: ZanixCacheProvider
     kvDb?: ZanixKVConnector
+    sessionOptions?: Partial<AuthSessionOptions>
   } = {},
 ): Promise<SessionTokens & { oldToken: string; payload: JWTPayload }> => {
   const { token: tokenHeader } = SESSION_HEADERS['user']
@@ -89,7 +96,7 @@ export const refreshSessionTokensBase = async (
     }
   }
 
-  const tokens = await generateSessionTokens(ctx, payload.access)
+  const tokens = await generateSessionTokens(ctx, { ...payload.access, ...options.sessionOptions })
 
   // Rotate: a refresh token is single-use. Blocklisting the one just consumed — AFTER the new
   // tokens are safely generated, so a transient blocklist-write failure never strands the caller
@@ -130,6 +137,7 @@ export const refreshSessionTokens = async (
   options: {
     cache?: ZanixCacheProvider
     kvDb?: ZanixKVConnector
+    sessionOptions?: Partial<AuthSessionOptions>
   } = {},
 ): Promise<SessionTokens & { oldToken: string; payload: JWTPayload }> => {
   try {

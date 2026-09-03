@@ -241,12 +241,18 @@ export type SessionFlow = {
    * @param {string} token
    * The session refresh token.
    *
+   * @param {Partial<AuthSessionOptions>} [sessionOptions]
+   * Fields overriding the `AuthSessionOptions` originally embedded in the refresh token (e.g.
+   * freshly resolved `permissions`, after a role change), shallow-merged over it before the new
+   * tokens are generated. Omit to keep reusing the original login's own values, as before.
+   *
    * @returns {Promise<SessionTokens & { oldToken: string; payload: JWTPayload }>}
    * The newly generated session tokens, along with the previous refresh token
    * and its decoded payload.
    */
   refreshTokens: (
     token?: string,
+    sessionOptions?: Partial<AuthSessionOptions>,
   ) => Promise<SessionTokens & { oldToken: string; payload: JWTPayload }>
 }
 

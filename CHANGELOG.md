@@ -5,7 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] - 2026-09-02
+
+### Added
+
+- **`oauthStateIssueGuard`/`oauthStateVerifyGuard`** — a matched pair of guards protecting an OAuth2
+  login flow's authorization redirect and its callback against CSRF, via the `state` round trip the
+  OAuth2 authorization-code flow itself defines. `oauthStateIssueGuard()` mints a fresh, random
+  value on every `POST` to the login start page, persisting it in both a short-lived, `HttpOnly`
+  `X-Znx-Oauth-State` cookie (`OAUTH_STATE_COOKIE_NAME`) and `ctx.locals` (`OAUTH_STATE_LOCALS_KEY`,
+  for that page's own `action` to forward into `OAuth2Connector.generateAuthUrl({ state })`).
+  `oauthStateVerifyGuard()` verifies the provider's own callback `?state=...` against it before the
+  page exchanges the authorization code — single-use, clearing the cookie once consumed so a
+  replayed callback URL always fails. See
+  [OAuth2 CSRF State Protection](./docs/authentication-methods.md#-oauth2-csrf-state-protection).
+- **`pageSessionGuard(roles)`** — gates a `@zanix/space` page behind an active human session and at
+  least one required role (OR-matched), re-deriving the session from the `HttpOnly` refresh-token
+  cookie on every protected page load via this package's own
+  `refreshSessionTokens`/`permissionsPipe` — the ready-made version of the guard composition already
+  documented under "Guard-Stage Rotation Recovery". A 403 (or any other guard downstream throwing)
+  is caught and re-marked via `attachRotatedSessionToError` so the already-rotated replacement
+  cookie still reaches the client on the error response, instead of silently stranding it on a
+  now-blocklisted one. See
+  [Guard-Stage Rotation Recovery](./docs/configuration.md#-guard-stage-rotation-recovery).
+- `resolveCaptchaAdapter` — now exported from `mod.ts` alongside `resolveCaptchaProvider`. Resolves
+  `CaptchaOptions` into a ready-to-use `CaptchaProviderAdapter` (the same resolution `captchaGuard`
+  runs internally: `options.adapter` wins outright, otherwise `options.provider` — falling back to
+  `resolveCaptchaProvider()` — selects and configures one of `RecaptchaAdapter`/`HCaptchaAdapter`/
+  `TurnstileAdapter`). Lets a consumer that needs the resolved adapter instance itself — to expose
+  it as a swappable resource, for example — reuse this package's own provider-selection/env-var
+  mapping instead of re-deriving it.
+- **`refreshSessionTokens`/`session.refreshTokens()`** accept a new optional
+  `sessionOptions:
+  Partial<AuthSessionOptions>`, shallow-merged over the `AuthSessionOptions`
+  originally embedded in the refresh token before the replacement tokens are minted. Before this, a
+  refresh always reused exactly what was captured at the original login — a subject's `permissions`
+  (the `aud` claim an `AuthTokenValidation({ permissions })` RBAC check reads) could only change on
+  a brand-new login, leaving no way to reflect a role/permission change without forcing a full
+  re-login or revoking the refresh token outright.
+
+### Fixed
+
+- **The session-status/subject/cookie-consent cookies (`X-Znx-<type>-Session-Status`/
+  `X-Znx-<type>-Id`/`X-Znx-Cookies-Accepted`) shared the access token's own, much shorter `Max-Age`
+  (capped at 1h) even on a `'user'` session carrying a refresh token (`X-Znx-App-Token`, ~1 year).**
+  Once a browser dropped the now-expired `X-Znx-Cookies-Accepted` cookie, `checkAcceptedCookies()`
+  fell back to `false` on every later request from it — and `getSessionHeaders()`'s own consent gate
+  then withheld every session `Set-Cookie` for that browser, not just a stray one: a normal
+  refresh-token rotation stopped delivering its replacement cookie, and a logout/revoke stopped
+  clearing the session cookie too, even though the underlying token operations kept succeeding
+  server-side. `getSessionHeaders()` now ties those three cookies' `Max-Age` to the refresh token's
+  own expiration, same as `X-Znx-App-Token` itself, whenever one is issued alongside them — they
+  only fall back to the access token's shorter expiration for a session with no refresh token at all
+  (an `'api'` session).
 
 ## [1.0.0] - 2026-08-31
 

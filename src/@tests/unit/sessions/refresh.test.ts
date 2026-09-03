@@ -3,6 +3,7 @@ import { assert, assertEquals, assertRejects } from '@std/assert'
 import { HttpError, PermissionDenied } from '@zanix/errors'
 import { refreshSessionTokens, refreshSessionTokensBase } from 'utils/sessions/refresh.ts'
 import { createAppToken, generateSessionTokens } from 'utils/sessions/create.ts'
+import { decodeJWT } from 'utils/jwt/decode.ts'
 
 console.warn = () => {}
 
@@ -184,6 +185,33 @@ Deno.test('refreshSessionTokensBase: rotation detects reuse via cache alone, no 
 
   Deno.env.delete('JWT_KEY')
 })
+
+/**
+ * `options.sessionOptions` lets a caller re-resolve fields like `permissions` on refresh, instead
+ * of reusing whatever `AuthSessionOptions` was captured in the refresh token at the original
+ * login — the only way, before this, to reflect a role/permission change without forcing a full
+ * re-login.
+ */
+Deno.test(
+  'refreshSessionTokensBase: sessionOptions overrides permissions embedded at mint time',
+  async () => {
+    Deno.env.set('JWT_KEY', 'my secret')
+
+    const { refreshToken } = await generateSessionTokens(createCtx(), {
+      subject: 'user@example.com',
+      permissions: ['read'],
+    })
+
+    const result = await refreshSessionTokensBase(createCtx(), refreshToken, {
+      sessionOptions: { permissions: ['read', 'write'] },
+    })
+
+    const { payload } = decodeJWT(result.accessToken)
+    assertEquals(payload.aud, ['read', 'write'])
+
+    Deno.env.delete('JWT_KEY')
+  },
+)
 
 // ── The real, exported entry point: refreshSessionTokens wraps the Base above ──
 

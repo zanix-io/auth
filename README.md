@@ -142,6 +142,14 @@ It provides a **unified and extensible system** for:
   - `captchaGuard`: verifies a captcha response token (reCAPTCHA/hCaptcha/Turnstile) against a
     third-party anti-bot provider. See
     [Captcha (Anti-bot Verification)](./docs/configuration.md#-captcha-anti-bot-verification).
+  - `pageSessionGuard`: gates a `@zanix/space` page behind an active human session and at least one
+    required role, re-deriving the session from the `HttpOnly` refresh-token cookie on every
+    protected page load. See
+    [Guard-Stage Rotation Recovery](./docs/configuration.md#-guard-stage-rotation-recovery).
+  - `oauthStateIssueGuard`/`oauthStateVerifyGuard`: protects an OAuth2 login flow's authorization
+    redirect and its callback against CSRF, via the `state` round trip the OAuth2 code-flow spec
+    itself defines. See
+    [OAuth2 CSRF State Protection](./docs/authentication-methods.md#-oauth2-csrf-state-protection).
   - `permissionsPipe`: validates permissions before executing route logic.
 
 - **Decorators**

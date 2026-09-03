@@ -11,8 +11,9 @@ how permissions and scopes are checked across all of them. This guide covers all
 2. [Reading the Current Request's Access Token](#-reading-the-current-requests-access-token)
 3. [GitHub OAuth2](#-github-oauth2)
 4. [Adding a Custom OAuth2 Provider](#-adding-a-custom-oauth2-provider)
-5. [OTP (One-Time Password)](#-otp-one-time-password)
-6. [Two-Factor Authentication (TOTP)](#-two-factor-authentication-totp)
+5. [OAuth2 CSRF State Protection](#-oauth2-csrf-state-protection)
+6. [OTP (One-Time Password)](#-otp-one-time-password)
+7. [Two-Factor Authentication (TOTP)](#-two-factor-authentication-totp)
 
 ---
 
@@ -177,6 +178,67 @@ registered through `@zanix/auth/core`'s default env-driven setup, with no `optio
 default into directly. `GOOGLE_OAUTH2_TOKEN_URL` overrides Google's real token endpoint the same way
 `GOOGLE_OAUTH2_AUTH_URL`/`GOOGLE_OAUTH2_USERINFO_URL`/`GOOGLE_OAUTH2_REVOKE_URL` do for their own
 endpoints — rarely needed outside an enterprise proxy or a test double.
+
+---
+
+## 🛡️ OAuth2 CSRF State Protection
+
+`generateAuthUrl()`/`validateCode()` implement the `state` round trip the OAuth2 authorization-code
+flow spec itself defines, but never persist or compare a `state` value across the two separate HTTP
+requests that flow involves — the authorization redirect and, moments later, the provider's own
+callback. `oauthStateIssueGuard`/`oauthStateVerifyGuard` close that gap for a `@zanix/space` login
+flow: pure composition of this package's own connector primitives, with no product-specific logic of
+its own.
+
+```ts
+import {
+  OAUTH_STATE_LOCALS_KEY,
+  oauthStateIssueGuard,
+  oauthStateVerifyGuard,
+} from 'jsr:@zanix/auth'
+import { Guard } from 'jsr:@zanix/server'
+import { Page, SpacePageController } from 'jsr:@zanix/space'
+
+// The login start page — renders a confirmation screen on GET, starts the redirect on POST.
+@Page()
+@Guard(oauthStateIssueGuard())
+export default class OauthLoginPage extends SpacePageController {
+  action = (ctx) => {
+    const state = ctx.locals[OAUTH_STATE_LOCALS_KEY] as string
+    const { url } = this.providers.get('auth').google.generateAuthUrl({ state })
+    return Promise.resolve(Response.redirect(url, 302))
+  }
+}
+
+// The provider's own callback — the code-flow redirect target.
+@Page()
+@Guard(oauthStateVerifyGuard())
+export default class OauthCallbackPage extends SpacePageController {
+  loader = async (ctx) => {
+    const code = ctx.url.searchParams.get('code')!
+    await this.providers.get('auth').google.authenticateWithCode(code)
+  }
+}
+```
+
+`oauthStateIssueGuard` mints a fresh, random `state` on every `POST` to the start page (no-op on
+`GET`), persists it as the short-lived `X-Znx-Oauth-State` cookie, and stashes the same value under
+`ctx.locals[OAUTH_STATE_LOCALS_KEY]` for that page's own `action` to read back and forward into
+`generateAuthUrl({ state })` — the same "guard writes to `locals`, page reads it back" relay
+`@zanix/space`'s own `csrfGuard` already establishes for its CSRF token. A new value is minted on
+every `POST`, even when an unconsumed cookie from a previous, abandoned attempt is still present.
+
+`oauthStateVerifyGuard` runs on the callback page, before its `loader` ever exchanges the
+authorization `code`: it compares the provider's own `?state=...` query param against the persisted
+cookie, rejecting with `HttpError('BAD_REQUEST')` if either side is missing and
+`HttpError('FORBIDDEN')` on a mismatch — closing the classic OAuth2 CSRF an attacker-initiated
+authorization flow could otherwise complete against a victim's own session. It clears the cookie the
+moment it's successfully consumed, so a replayed callback URL (a browser back button, a captured
+link) always fails on its second attempt, even though its `state` genuinely matched the first time.
+
+The cookie is `HttpOnly`/`Secure`, like every Zanix session/token cookie, but `SameSite=Lax` rather
+than `Strict`: the provider's own redirect-back is a cross-site top-level navigation, which a
+`Strict` cookie would never survive.
 
 ---
 
