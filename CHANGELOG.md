@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-09-03
+
+### Fixed
+
+- **`applySessionTokens` is now exported from `mod.ts`.** This function — decodes an already-issued
+  `accessToken` and populates `ctx.locals.session` exactly as `generateTokens`/a fresh mint would,
+  then attaches the given `refreshToken` as `token` — already existed and was already exercised
+  internally (`refreshSessionTokensBase`'s rotation-grace-window path reuses it to reapply a
+  previously-issued pair), but was never part of the package's own public surface. A consumer that
+  mints its own session tokens locally never needed this; one that instead delegates authentication
+  to a **separately deployed identity service** — calling that service's own login endpoint over the
+  network rather than minting tokens itself — had no supported way to apply the token pair that
+  service already issued onto its own request's session, short of reimplementing this function's own
+  (already correct, already tested) logic by hand. No behavior change to anything already using this
+  function internally.
+
 ## [1.1.1] - 2026-09-03
 
 ### Fixed

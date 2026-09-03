@@ -121,6 +121,7 @@ export {
   recoverRotatedSessionCookie,
 } from 'utils/sessions/rotation-recovery.ts'
 export {
+  applySessionTokens,
   createAccessToken,
   createAppToken,
   createRefreshToken,
