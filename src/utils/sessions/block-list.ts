@@ -1,6 +1,9 @@
 import type { ZanixCacheProvider, ZanixKVConnector } from '@zanix/server'
 import type { JWTPayload } from 'typings/jwt.ts'
-import { CACHE_KEYS, REDIS_URI_ENV } from 'utils/constants.ts'
+import type { SessionTokens } from 'typings/sessions.ts'
+import { isNumberString } from '@zanix/validator'
+import { parseTTL } from '@zanix/helpers'
+import { CACHE_KEYS, REDIS_URI_ENV, ROTATION_GRACE_WINDOW_ENV } from 'utils/constants.ts'
 import { decodeJWT } from 'utils/jwt/decode.ts'
 import { toJwtHttpError } from 'utils/jwt/verification-error.ts'
 import logger from '@zanix/logger'
@@ -123,5 +126,90 @@ export async function addTokenToBlockList(
     return await addTokenToBlockListBase(token, cache, kvDb)
   } catch (e) {
     toJwtHttpError(e, 'BAD_REQUEST')
+  }
+}
+
+/**
+ * Reads the rotation grace window from `ROTATION_GRACE_WINDOW` ({@link ROTATION_GRACE_WINDOW_ENV}).
+ * The value is a TTL string such as `'5s'`, `'10s'`, or a bare number of seconds; a missing value
+ * defaults to `'5s'`, and an explicit `'0'` disables the window.
+ *
+ * @returns {number} The grace window length in seconds. Returns `0` when disabled.
+ */
+function getRotationGraceWindowSeconds(): number {
+  const windowStr = Deno.env.get(ROTATION_GRACE_WINDOW_ENV) || '5s'
+  if (windowStr === '0') return 0
+  return parseTTL(isNumberString(windowStr) ? Number(windowStr) : windowStr)
+}
+
+/**
+ * Looks up the replacement pair a rotation already issued for the given token ID, while it's still
+ * within its grace window — the short-lived companion entry {@link setRotationGraceTokens} writes
+ * right after a successful rotation.
+ *
+ * `refreshSessionTokensBase` consults this only once a presented token is confirmed blocklisted: a
+ * hit here means the token wasn't reused after the fact, it's the SAME legitimate client's request
+ * arriving a moment after another request already rotated it (a browser prefetching a link on hover
+ * and then navigating it, a double click, two tabs on one session, a client's own retry) — so it
+ * gets the already-issued pair back instead of a rejection. A miss past the grace window is treated
+ * as a genuine reuse, same as before this existed.
+ *
+ * @param {string} tokenId - The `jti` of the presented, already-blocklisted token.
+ * @param {ZanixCacheProvider} cache - Cache provider.
+ * @param {ZanixKVConnector} [kvDb] - Key-value store connector. Same optional fallback role as in
+ * {@link checkTokenBlockList}.
+ * @returns {Promise<SessionTokens | undefined>} The replacement pair, or `undefined` once the grace
+ * window has elapsed (or when it's disabled via `ROTATION_GRACE_WINDOW=0`).
+ */
+export async function getRotationGraceTokens(
+  tokenId: string,
+  cache: ZanixCacheProvider,
+  kvDb?: ZanixKVConnector,
+): Promise<SessionTokens | undefined> {
+  const key = `${CACHE_KEYS.jwtRotationGrace}:${tokenId}`
+
+  if (Deno.env.has(REDIS_URI_ENV)) {
+    return await cache.getCachedOrFetch<SessionTokens | undefined>('redis', key)
+  }
+
+  let cacheValue = cache.local.get<SessionTokens>(key)
+  if (cacheValue === undefined) {
+    cacheValue = kvDb?.get(key)
+    if (cacheValue) cache.local.set(key, cacheValue)
+  }
+
+  return cacheValue
+}
+
+/**
+ * Records the pair a successful rotation just issued, keyed by the `jti` of the token it consumed —
+ * the companion write {@link getRotationGraceTokens} reads back. Expires after the configured
+ * rotation grace window ({@link ROTATION_GRACE_WINDOW_ENV}, default `5s`); a no-op once that window
+ * is disabled (`ROTATION_GRACE_WINDOW=0`).
+ *
+ * `refreshSessionTokensBase` calls this BEFORE {@link addTokenToBlockListBase} for the same
+ * rotation, not after: a concurrent request can only ever observe the old token as blocklisted once
+ * this entry already exists to answer it, never the reverse.
+ *
+ * @param {string} tokenId - The `jti` of the token just consumed by rotation.
+ * @param {SessionTokens} tokens - The newly issued pair to hand back to a near-simultaneous retry.
+ * @param {ZanixCacheProvider} cache - Cache provider.
+ * @param {ZanixKVConnector} [kvDb] - Key-value store connector.
+ */
+export async function setRotationGraceTokens(
+  tokenId: string,
+  tokens: SessionTokens,
+  cache: ZanixCacheProvider,
+  kvDb?: ZanixKVConnector,
+): Promise<void> {
+  const ttl = getRotationGraceWindowSeconds()
+  if (ttl <= 0) return
+
+  const key = `${CACHE_KEYS.jwtRotationGrace}:${tokenId}`
+  if (Deno.env.has(REDIS_URI_ENV)) {
+    await cache.saveToCaches({ provider: 'redis', key, value: tokens, exp: ttl })
+  } else {
+    cache.local.set(key, tokens, { exp: ttl })
+    kvDb?.set(key, tokens, ttl)
   }
 }

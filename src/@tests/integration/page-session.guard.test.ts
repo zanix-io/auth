@@ -11,6 +11,7 @@ import { HttpError } from '@zanix/errors'
 import { pageSessionGuard } from 'modules/middlewares/page-session.guard.ts'
 import { recoverRotatedSessionCookie } from 'utils/sessions/rotation-recovery.ts'
 import { generateSessionTokens } from 'utils/sessions/create.ts'
+import { ROTATION_GRACE_WINDOW_ENV } from 'utils/constants.ts'
 
 // `pageSessionGuard` is pure composition of `refreshSessionTokens`/`permissionsPipe`/
 // `attachRotatedSessionToError` — each already has its own dedicated unit coverage. What's under
@@ -125,6 +126,9 @@ Deno.test('pageSessionGuard: matches when the session carries any one of several
 
 Deno.test('pageSessionGuard: single-use rotation — a consumed refresh token is rejected on reuse when a cache is wired', async () => {
   Deno.env.set('JWT_KEY', 'my secret')
+  // Disables the rotation grace window: this test asserts strict, no-tolerance reuse rejection —
+  // the near-simultaneous-retry case the grace window is FOR gets its own dedicated coverage below.
+  Deno.env.set(ROTATION_GRACE_WINDOW_ENV, '0')
 
   const refreshToken = await mintRefreshToken(['admin'])
   const blocklisted = new Map<string, boolean>()
@@ -157,4 +161,52 @@ Deno.test('pageSessionGuard: single-use rotation — a consumed refresh token is
   assertEquals(error.status.value, 401)
 
   Deno.env.delete('JWT_KEY')
+  Deno.env.delete(ROTATION_GRACE_WINDOW_ENV)
 })
+
+/**
+ * Covers the rotation grace window through the full `pageSessionGuard` composition, not just
+ * `refreshSessionTokensBase` in isolation: a near-simultaneous second request presenting the SAME
+ * token must pass the guard (not a 401), AND must leave `ctx.locals.session` correctly populated —
+ * `permissionsPipe` reads it right after, unconditionally, with no awareness that this request's
+ * pair came from the grace cache rather than a fresh rotation.
+ */
+Deno.test(
+  'pageSessionGuard: a near-simultaneous re-presentation within the grace window passes the ' +
+    'guard, with ctx.locals.session correctly populated',
+  async () => {
+    Deno.env.set('JWT_KEY', 'my secret')
+
+    const refreshToken = await mintRefreshToken(['admin'])
+    const blocklisted = new Map<string, unknown>()
+    // Backs BOTH the local-cache path and the Redis path off the SAME underlying map — see the
+    // identical concern noted on the regression test above: another test file running earlier in
+    // this same process may have left `REDIS_URI` set, so this double stays correct either way.
+    const cache = {
+      local: {
+        get: (key: string) => blocklisted.get(key),
+        set: (key: string, value: unknown) => blocklisted.set(key, value),
+      },
+      getCachedOrFetch: (_provider: string, key: string) => Promise.resolve(blocklisted.get(key)),
+      saveToCaches: ({ key, value }: { key: string; value: unknown }) => {
+        blocklisted.set(key, value)
+        return Promise.resolve()
+      },
+    }
+
+    const guard = pageSessionGuard(['admin'])
+
+    const firstCtx = createCtx({ 'X-Znx-App-Token': refreshToken }, cache)
+    await guard(firstCtx)
+
+    // The SAME token, presented again immediately after — within the default grace window, this
+    // must pass the guard just like the first request did.
+    const secondCtx = createCtx({ 'X-Znx-App-Token': refreshToken }, cache)
+    await guard(secondCtx)
+
+    assertEquals(secondCtx.locals.session.scope, ['admin'])
+    assertEquals(secondCtx.locals.session.token, firstCtx.locals.session.token)
+
+    Deno.env.delete('JWT_KEY')
+  },
+)

@@ -4,6 +4,7 @@ import { HttpError, PermissionDenied } from '@zanix/errors'
 import { refreshSessionTokens, refreshSessionTokensBase } from 'utils/sessions/refresh.ts'
 import { createAppToken, generateSessionTokens } from 'utils/sessions/create.ts'
 import { decodeJWT } from 'utils/jwt/decode.ts'
+import { CACHE_KEYS, ROTATION_GRACE_WINDOW_ENV } from 'utils/constants.ts'
 
 console.warn = () => {}
 
@@ -82,7 +83,11 @@ Deno.test('refreshSessionTokensBase throws PermissionDenied for a blocklisted to
     subject: 'user@example.com',
   })
 
-  const cache = { local: { get: () => true } } as any
+  // Keyed like the real cache: blocklisted, but with no rotation-grace entry (e.g. a revoked
+  // token, or one whose grace window already elapsed) — a straight rejection, no tolerance.
+  const cache = {
+    local: { get: (key: string) => key.includes(CACHE_KEYS.jwtBlockList) ? true : undefined },
+  } as any
   const kvDb = { get: () => undefined } as any
 
   await assertRejects(
@@ -124,16 +129,19 @@ Deno.test('refreshSessionTokensBase succeeds when the token is not in the block 
  */
 Deno.test('refreshSessionTokensBase: rotation blocklists the consumed token', async () => {
   Deno.env.set('JWT_KEY', 'my secret')
+  // Disables the rotation grace window: this test asserts strict, no-tolerance reuse rejection,
+  // not the grace path — that gets its own dedicated coverage below.
+  Deno.env.set(ROTATION_GRACE_WINDOW_ENV, '0')
 
   const { refreshToken } = await generateSessionTokens(createCtx(), {
     subject: 'user@example.com',
   })
 
-  const blocklisted = new Map<string, boolean>()
+  const blocklisted = new Map<string, unknown>()
   const cache = {
     local: {
       get: (key: string) => blocklisted.get(key),
-      set: (key: string, value: boolean) => blocklisted.set(key, value),
+      set: (key: string, value: unknown) => blocklisted.set(key, value),
     },
   } as any
   const kvDb = { get: () => undefined, set: () => {} } as any
@@ -147,7 +155,48 @@ Deno.test('refreshSessionTokensBase: rotation blocklists the consumed token', as
     () => refreshSessionTokensBase(createCtx(), refreshToken, { cache, kvDb }),
     PermissionDenied,
   )
+
+  Deno.env.delete(ROTATION_GRACE_WINDOW_ENV)
 })
+
+/**
+ * Covers the rotation grace window: two requests presenting the SAME, still-valid-at-send-time
+ * refresh token in close succession — a browser prefetching a link on hover and then navigating
+ * it, a double click, two tabs on one session — is a legitimate pattern, not a replay. The second
+ * request lands after the first already rotated and blocklisted the token, but within the grace
+ * window it gets the first request's own newly issued pair back instead of a rejection.
+ */
+Deno.test(
+  'refreshSessionTokensBase: a near-simultaneous re-presentation within the grace window ' +
+    'returns the already-issued pair instead of rejecting',
+  async () => {
+    Deno.env.set('JWT_KEY', 'my secret')
+
+    const { refreshToken } = await generateSessionTokens(createCtx(), {
+      subject: 'user@example.com',
+    })
+
+    const store = new Map<string, unknown>()
+    const cache = {
+      local: {
+        get: (key: string) => store.get(key),
+        set: (key: string, value: unknown) => store.set(key, value),
+      },
+    } as any
+    const kvDb = { get: () => undefined, set: () => {} } as any
+
+    const first = await refreshSessionTokensBase(createCtx(), refreshToken, { cache, kvDb })
+    assert(first.accessToken)
+
+    // The SAME token, presented again immediately after — within the default grace window, this
+    // must succeed with the exact pair `first` already issued, not a rejection.
+    const second = await refreshSessionTokensBase(createCtx(), refreshToken, { cache, kvDb })
+    assertEquals(second.accessToken, first.accessToken)
+    assertEquals(second.refreshToken, first.refreshToken)
+
+    Deno.env.delete('JWT_KEY')
+  },
+)
 
 /**
  * Regression coverage for a confirmed inconsistency: the reuse CHECK used to require both
@@ -160,16 +209,19 @@ Deno.test('refreshSessionTokensBase: rotation blocklists the consumed token', as
  */
 Deno.test('refreshSessionTokensBase: rotation detects reuse via cache alone, no kvDb', async () => {
   Deno.env.set('JWT_KEY', 'my secret')
+  // Disables the rotation grace window: this test asserts strict, no-tolerance reuse rejection,
+  // not the grace path — that gets its own dedicated coverage below.
+  Deno.env.set(ROTATION_GRACE_WINDOW_ENV, '0')
 
   const { refreshToken } = await generateSessionTokens(createCtx(), {
     subject: 'user@example.com',
   })
 
-  const blocklisted = new Map<string, boolean>()
+  const blocklisted = new Map<string, unknown>()
   const cache = {
     local: {
       get: (key: string) => blocklisted.get(key),
-      set: (key: string, value: boolean) => blocklisted.set(key, value),
+      set: (key: string, value: unknown) => blocklisted.set(key, value),
     },
   } as any
 
@@ -184,6 +236,7 @@ Deno.test('refreshSessionTokensBase: rotation detects reuse via cache alone, no 
   )
 
   Deno.env.delete('JWT_KEY')
+  Deno.env.delete(ROTATION_GRACE_WINDOW_ENV)
 })
 
 /**
@@ -242,7 +295,10 @@ Deno.test(
       subject: 'user@example.com',
     })
 
-    const cache = { local: { get: () => true } } as any
+    // Keyed like the real cache: blocklisted, but with no rotation-grace entry.
+    const cache = {
+      local: { get: (key: string) => key.includes(CACHE_KEYS.jwtBlockList) ? true : undefined },
+    } as any
     const kvDb = { get: () => undefined } as any
 
     const error = await assertRejects(

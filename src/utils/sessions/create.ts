@@ -262,3 +262,26 @@ export const generateSessionTokens = async (
     refreshToken: sessionRefreshToken,
   }
 }
+
+/**
+ * Applies an already-issued session token pair onto `ctx.locals.session`, decoding `tokens.accessToken`
+ * to derive the same fields {@link defineLocalSession} sets when a pair is freshly minted by
+ * {@link generateSessionTokens} — `type` is always `'user'`, matching what `generateSessionTokens`
+ * itself always mints.
+ *
+ * Exists for `refreshSessionTokensBase`'s rotation grace window: when it hands back a pair
+ * `generateSessionTokens` already issued for an earlier request instead of minting a new one, the
+ * CURRENT request's `ctx.locals.session` still needs populating exactly as it would have been the
+ * first time — permission checks and response interceptors downstream (e.g. `permissionsPipe`,
+ * `sessionHeadersInterceptor`) read it unconditionally, with no awareness that this pair came from
+ * the grace cache rather than a fresh `generateSessionTokens` call.
+ *
+ * @param {ScopedContext} ctx - The scoped context whose `locals.session` gets populated.
+ * @param {SessionTokens} tokens - The already-issued pair to apply.
+ */
+export const applySessionTokens = (ctx: ScopedContext, tokens: SessionTokens): void => {
+  const { payload } = decodeJWT(tokens.accessToken)
+
+  defineLocalSession(ctx, { type: 'user', payload, status: 'active' })
+  Object.assign(ctx.locals.session as object, { token: tokens.refreshToken })
+}
