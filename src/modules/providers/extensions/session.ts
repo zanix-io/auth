@@ -8,10 +8,11 @@ import { revokeSessionToken } from 'utils/sessions/revoke.ts'
 export function session(this: ZanixAuthProvider): SessionFlow {
   return {
     generateTokens: (options: AuthSessionOptions) => generateSessionTokens(this.context, options),
-    refreshTokens: (token?: string) =>
+    refreshTokens: (token?: string, sessionOptions?: Partial<AuthSessionOptions>) =>
       refreshSessionTokens(this.context, token, {
         cache: this.cache,
         kvDb: this.kvLocal,
+        sessionOptions,
       }),
     revokeToken: (token?: string) =>
       revokeSessionToken(this.context, {

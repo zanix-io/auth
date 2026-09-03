@@ -137,7 +137,9 @@ vars) only needs to be set when more than one provider's secret key is configure
 optional-selector shape `@zanix/notifications`'s `SMS_PROVIDER`/`WHATSAPP_PROVIDER` uses); with
 exactly one provider's secret key set, it's auto-detected with zero extra config. If nothing is
 configured at all, this guard is a pass-through — it does not restrict requests, matching
-`ipAllowlistGuard`'s own unconfigured behavior.
+`ipAllowlistGuard`'s own unconfigured behavior. `resolveCaptchaAdapter(options)` runs this same
+resolution on its own, for a caller that needs the resolved `CaptchaProviderAdapter` instance itself
+rather than a guard built around it — exposing it as a swappable resource, for example.
 
 **Score-based providers**: reCAPTCHA v3 (and any future provider/key that returns a confidence
 `score`) is gated by `options.minScore` (default `0.5`) — a response below that threshold is
@@ -169,16 +171,22 @@ When a valid session is present, the following headers may be added to the respo
   ```text
   X-Znx-App-Token=<refreshToken>; Max-Age=<refreshTokenSeconds>; Path=/; HttpOnly; Secure; SameSite=Strict
 
-  X-Znx-<type>-Session-Status=<SessionStatus>; Max-Age=<seconds>; Path=/; HttpOnly; Secure; SameSite=Strict
+  X-Znx-<type>-Session-Status=<SessionStatus>; Max-Age=<refreshTokenSeconds>; Path=/; HttpOnly; Secure; SameSite=Strict
 
-  X-Znx-<type>-Id=<sub>; Max-Age=<seconds>; Path=/; HttpOnly; Secure; SameSite=Strict
+  X-Znx-<type>-Id=<sub>; Max-Age=<refreshTokenSeconds>; Path=/; HttpOnly; Secure; SameSite=Strict
 
-  X-Znx-Cookies-Accepted=true; Max-Age=<seconds>; Path=/; HttpOnly; Secure; SameSite=Strict
+  X-Znx-Cookies-Accepted=true; Max-Age=<refreshTokenSeconds>; Path=/; HttpOnly; Secure; SameSite=Strict
   ```
 
-  `X-Znx-App-Token`'s `Max-Age` is derived from the refresh token's own expiration (e.g. ~1 year),
-  independent of `<seconds>` above (derived from the access token's expiration, capped at 1h) used
-  by the other three cookies.
+  All four share `<refreshTokenSeconds>` — the refresh token's own expiration (e.g. ~1 year) —
+  whenever a refresh token is issued alongside them. They only fall back to the access token's own,
+  much shorter expiration (capped at 1h) for a session with no refresh token at all (an `'api'`
+  session, which has no refresh-token concept to begin with). Tying the other three to the access
+  token even when a refresh token exists would let them expire out from under a still-alive session:
+  once a browser drops the now-expired `X-Znx-Cookies-Accepted`, `checkAcceptedCookies()` falls back
+  to `false` on every later request, and `getSessionHeaders()` then withholds every session
+  `Set-Cookie` for it — not just a stray one, but a normal refresh-token rotation and even a later
+  logout/revoke's own clearing cookie — while `X-Znx-App-Token` itself is still genuinely valid.
 
 > These header names come from the `AUTH_HEADERS`/`SESSION_HEADERS`/`GENERAL_HEADERS` constants,
 > exported from `@zanix/server` (not from `@zanix/auth` itself) — see `@zanix/server`'s
@@ -222,7 +230,11 @@ a `true` request already arrived, so this package never sets it unprompted eithe
 `refreshSessionTokens()` rotates the refresh token: it verifies the current one, mints a
 replacement, and — when `options.cache` is provided — blocklists the consumed token as part of the
 same call (single-use rotation, so a stolen token replayed after the legitimate client already
-refreshed is rejected, not silently accepted).
+refreshed is rejected, not silently accepted). The replacement reuses the `AuthSessionOptions`
+originally embedded in the refresh token at login, unless `options.sessionOptions` overrides some of
+them — a caller that just re-resolved a subject's current `permissions` (after a role change, say)
+passes them there to have the new tokens carry the fresh value, instead of the one still recorded
+from the original login.
 
 **Known limitation when rotation runs inside a guard, and something later in the same guard chain
 throws** (a permission check failing, most commonly): `@zanix/server`'s guard pipeline skips its
@@ -250,6 +262,17 @@ export function requireSession(roles: string[]): MiddlewareGuard {
     return {}
   }
 }
+```
+
+`pageSessionGuard(roles)` is this exact composition, ready-made — reach for it directly instead of
+hand-rolling the guard above unless you need a genuinely different combination of primitives:
+
+```ts
+import { pageSessionGuard } from 'jsr:@zanix/auth'
+
+@Page()
+@Guard(pageSessionGuard(['admin', 'admin:triggers']))
+export default class TriggersPage extends SpacePageController {/* ... */}
 ```
 
 Wire `recoverRotatedSessionCookie()` as `server.ssr.onError` — typically composed via

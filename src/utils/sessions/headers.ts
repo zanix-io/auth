@@ -21,9 +21,12 @@ const { cookiesAcceptedHeader } = GENERAL_HEADERS
  * - If `cookiesAccepted` is `true`, also sets `Set-Cookie` entries for the
  *   session status, the subject, and cookie consent itself, each with
  *   `Max-Age=<maxAge>` (cookie lifetime in seconds), `Path=/`, `HttpOnly`,
- *   `Secure`, `SameSite=Strict`. If a `refreshToken` is provided (or `maxAge` is `0`,
- *   to clear it), a refresh-token cookie is set as well — its `Max-Age` is
- *   derived from the refresh token's own `exp` claim, not from `maxAge`.
+ *   `Secure`, `SameSite=Strict`. If a `refreshToken` is provided (or `expiration` is `0`,
+ *   to clear it), a refresh-token cookie is set as well, with its own `Max-Age` derived from the
+ *   refresh token's own `exp` claim. Whenever a `refreshToken` is given, that same, much longer
+ *   `Max-Age` is what the session status/subject/cookie-consent cookies get too — never
+ *   `expiration`'s own, much shorter one — so the consent signal that gates this whole function
+ *   never expires out from under a session the refresh-token cookie still keeps alive.
  * - If `cookiesAccepted` is `false`, no cookies are added.
  *
  * Defaults:
@@ -35,13 +38,19 @@ const { cookiesAcceptedHeader } = GENERAL_HEADERS
  * @param {SessionStatus} [options.sessionStatus='unconfirmed'] - Indicates whether the session is active.
  * @param {string} options.subject - The subject/user identifier included in headers and cookies.
  * @param {'user' | 'api'} options.type - Determines which session and subject headers/cookies to use.
- * @param {number} [options.expiration=0] - The access token's expiration (Unix timestamp), used to compute
- *                                          the `maxAge` (in seconds) for the session status/subject/cookie-consent
- *                                          cookies. When set to `0`, those cookies are issued with `Max-Age=0`,
- *                                          effectively removing them.
- * @param {string} [options.refreshToken] - The refresh token to store in the `user` session's app-token cookie
- *                                          (only applies when `type` is `'user'`). Its own `exp` claim, not
- *                                          `expiration` above, determines that cookie's `Max-Age`.
+ * @param {number} [options.expiration=0] - The access token's expiration (Unix timestamp). Used to
+ *                                          compute the session status/subject/cookie-consent cookies'
+ *                                          `Max-Age` only when no `refreshToken` is given (an `'api'`
+ *                                          session, or a `'user'` one issued with no refresh token at
+ *                                          all) — see `refreshToken` below otherwise. When set to `0`,
+ *                                          every cookie is issued with `Max-Age=0`, clearing all of them
+ *                                          regardless of `refreshToken`.
+ * @param {string} [options.refreshToken] - The refresh token to store in the `user` session's app-token
+ *                                          cookie (only applies when `type` is `'user'`). Its own `exp`
+ *                                          claim — not `expiration` above — determines that cookie's
+ *                                          `Max-Age`, and the session status/subject/cookie-consent
+ *                                          cookies' `Max-Age` as well, so all of them stay alive exactly
+ *                                          as long as the session this refresh token represents does.
  *
  * @returns {Headers} A dictionary of HTTP headers containing
  * session metadata and optionally a `Set-Cookie` header.
@@ -72,7 +81,28 @@ export function getSessionHeaders(options: {
 
   if (cookiesAccepted) {
     const nowInSeconds = Math.floor(Date.now() / 1000) // current Unix timestamp
-    const maxAge = Math.max(0, Math.floor(expiration - nowInSeconds))
+    const accessMaxAge = Math.max(0, Math.floor(expiration - nowInSeconds))
+
+    // `maxAge === 0` signals session invalidation (logout/revoke passes `expiration: 0`), so it
+    // always wins and zeroes every cookie below, regardless of the refresh token's own exp.
+    // `!refreshToken` is redundant at runtime (the `if` below guarantees it's set whenever
+    // `accessMaxAge !== 0`), but TypeScript can't infer that across statements — kept for narrowing.
+    const refreshTokenMaxAge = accessMaxAge === 0 || !refreshToken ? 0 : Math.max(
+      0,
+      Math.floor(
+        (decodeJWT(refreshToken).payload.exp ?? nowInSeconds) - nowInSeconds,
+      ),
+    )
+
+    // The session-status/subject/cookie-consent cookies below must track the REFRESH token's own,
+    // much longer lifetime (e.g. '1y', set independently in `createRefreshToken`) whenever one is
+    // present — never the much shorter-lived access token's `expiration` above. Tying them to the
+    // access token instead would let them expire out from under a still-alive session: once the
+    // browser drops the consent cookie, `checkAcceptedCookies` falls back to `false`, and no
+    // session `Set-Cookie` — not even a clearing one on a later logout/revoke, nor a rotated
+    // refresh token on a later normal refresh — can be emitted again for it, even though the
+    // refresh-token cookie itself (`X-Znx-App-Token`) is still very much valid.
+    const maxAge = refreshToken ? refreshTokenMaxAge : accessMaxAge
 
     const baseCookie = SESSION_COOKIE_ATTRIBUTES
     const baseCookieWithExp = `Max-Age=${maxAge}; ${baseCookie}`
@@ -87,21 +117,7 @@ export function getSessionHeaders(options: {
       `${cookiesAcceptedHeader}=true; ${baseCookieWithExp}`,
     )
 
-    if (tokenHeader && (refreshToken || maxAge === 0)) {
-      // The refresh-token cookie's lifetime must match the refresh token's OWN expiration
-      // (set independently, e.g. '1y' in createRefreshToken), not `maxAge` above — that one
-      // tracks the much shorter-lived access token's `exp` and would otherwise expire this
-      // cookie long before the refresh token itself stops being valid.
-      // `maxAge === 0` signals session invalidation (same as the other cookies above), so it
-      // always wins and zeroes this cookie too, regardless of the refresh token's own exp.
-      // `!refreshToken` is redundant at runtime (the `if` above guarantees it's set whenever
-      // maxAge !== 0), but TypeScript can't infer that across statements — kept for narrowing.
-      const refreshTokenMaxAge = maxAge === 0 || !refreshToken ? 0 : Math.max(
-        0,
-        Math.floor(
-          (decodeJWT(refreshToken).payload.exp ?? nowInSeconds) - nowInSeconds,
-        ),
-      )
+    if (tokenHeader && (refreshToken || accessMaxAge === 0)) {
       headers['Set-Cookie'].push(
         `${tokenHeader}=${refreshToken}; Max-Age=${refreshTokenMaxAge}; ${baseCookie}`,
       )

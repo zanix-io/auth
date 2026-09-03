@@ -88,6 +88,71 @@ Deno.test('getSessionHeaders derives the refresh cookie Max-Age from its own exp
   assertMatch(appTokenCookie, /Max-Age=3153[0-9]{4};/) // ~1 year, not ~3600 (1h)
 })
 
+/**
+ * Regression coverage for a confirmed vulnerability: the session-status/subject/cookie-consent
+ * cookies used to be capped at the access token's own `expiration` (≤1h) even when a `refreshToken`
+ * (~1y) was also given — expiring `X-Znx-Cookies-Accepted` long before the session cookie it's meant
+ * to gate. Once a browser dropped that expired consent cookie, `checkAcceptedCookies` fell back to
+ * `false` for every later request, and this function's own `if (cookiesAccepted)` gate then
+ * suppressed EVERY session `Set-Cookie` for that browser — not just a stray one, but a normal
+ * refresh-token rotation and even a logout/revoke's own clearing cookie — while the underlying
+ * refresh token stayed genuinely valid server-side.
+ */
+Deno.test(
+  "getSessionHeaders: the status/subject/cookie-consent cookies track the refresh token's own " +
+    'exp, not the shorter access token expiration, when a refreshToken is given',
+  async () => {
+    const now = Math.floor(Date.now() / 1000)
+    // Access token expiring in 1h, as generateSessionTokens always issues it.
+    const expiration = now + 3600
+    // Refresh token expiring in ~1y, as createRefreshToken does.
+    const refreshToken = await createJWT({}, 'my-secret', { expiration: '1y' })
+
+    const { 'Set-Cookie': cookies } = getSessionHeaders({
+      cookiesAccepted: true,
+      type: 'user',
+      sessionStatus: 'active',
+      subject: 'alice',
+      expiration,
+      refreshToken,
+    })
+
+    const statusCookie = cookies.find((cookie) => cookie.startsWith('X-Znx-User-Session-Status='))
+    const subjectCookie = cookies.find((cookie) => cookie.startsWith('X-Znx-User-Id='))
+    const consentCookie = cookies.find((cookie) => cookie.startsWith('X-Znx-Cookies-Accepted='))
+
+    for (const cookie of [statusCookie, subjectCookie, consentCookie]) {
+      assert(cookie)
+      assertMatch(cookie, /Max-Age=3153[0-9]{4};/) // ~1 year, not ~3600 (1h)
+    }
+  },
+)
+
+/**
+ * Without a `refreshToken` at all (an `'api'` session, or a `'user'` one that never got one), these
+ * cookies have no longer-lived signal to track — they stay bound to `expiration`, exactly as before.
+ */
+Deno.test(
+  'getSessionHeaders: the status/subject/cookie-consent cookies still use expiration when there ' +
+    'is no refreshToken',
+  () => {
+    const now = Math.floor(Date.now() / 1000)
+    const expiration = now + 3600
+
+    const { 'Set-Cookie': cookies } = getSessionHeaders({
+      cookiesAccepted: true,
+      type: 'user',
+      sessionStatus: 'active',
+      subject: 'alice',
+      expiration,
+    })
+
+    assertMatch(cookies[0], /Max-Age=3600;/)
+    assertMatch(cookies[1], /Max-Age=3600;/)
+    assertMatch(cookies[2], /Max-Age=3600;/)
+  },
+)
+
 Deno.test('getSessionHeaders zeroes the refresh cookie Max-Age when it has no exp', async () => {
   const refreshToken = await createJWT({}, 'my-secret') // no `expiration` -> no `exp` claim
 
@@ -121,6 +186,15 @@ Deno.test('getSessionHeaders zeroes the refresh cookie when invalidated', async 
   const appTokenCookie = cookies.find((cookie) => cookie.startsWith('X-Znx-App-Token='))
   assert(appTokenCookie)
   assertMatch(appTokenCookie, /Max-Age=0;/)
+
+  // Invalidation (`expiration: 0`) wins over the refresh token's own long exp for every cookie,
+  // not just the app-token one — a logout/revoke must still clear the whole batch.
+  const statusCookie = cookies.find((cookie) => cookie.startsWith('X-Znx-User-Session-Status='))
+  const consentCookie = cookies.find((cookie) => cookie.startsWith('X-Znx-Cookies-Accepted='))
+  assert(statusCookie)
+  assert(consentCookie)
+  assertMatch(statusCookie, /Max-Age=0;/)
+  assertMatch(consentCookie, /Max-Age=0;/)
 })
 
 Deno.test('getSessionHeaders clears the refresh cookie when there is no refresh token', () => {

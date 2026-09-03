@@ -63,6 +63,7 @@ export {
   HCAPTCHA_SECRET_KEY_ENV,
   RECAPTCHA_API_BASE_ENV,
   RECAPTCHA_SECRET_KEY_ENV,
+  resolveCaptchaAdapter,
   resolveCaptchaProvider,
   TURNSTILE_API_BASE_ENV,
   TURNSTILE_SECRET_KEY_ENV,
@@ -198,10 +199,17 @@ export {
   rateLimitGuard,
 } from 'modules/middlewares/rate-limit.guard.ts'
 export { jwtValidationGuard } from 'modules/middlewares/jwt-validation.guard.ts'
+export { pageSessionGuard } from 'modules/middlewares/page-session.guard.ts'
 export { permissionsPipe } from 'modules/middlewares/permissions.pipe.ts'
 export { ADMIN_IP_ALLOWLIST_ENV, ipAllowlistGuard } from 'modules/middlewares/ip-allowlist.guard.ts'
 export type { IpAllowlistOptions } from 'modules/middlewares/ip-allowlist.guard.ts'
 export { CAPTCHA_TOKEN_HEADER, captchaGuard } from 'modules/middlewares/captcha.guard.ts'
+export {
+  OAUTH_STATE_COOKIE_NAME,
+  OAUTH_STATE_LOCALS_KEY,
+  oauthStateIssueGuard,
+  oauthStateVerifyGuard,
+} from 'modules/middlewares/oauth-state.guard.ts'
 
 // Decorators
 export { AuthTokenValidation } from 'modules/middlewares/decorators/authentication.ts'
