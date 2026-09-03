@@ -23,6 +23,7 @@ export const DEFAULT_AUTH_ISSUER = 'zanix-auth'
 
 export const CACHE_KEYS = {
   jwtBlockList: 'zanix:jwt-block-list',
+  jwtRotationGrace: 'zanix:jwt-rotation-grace',
   rateLimit: 'zanix:rate-limit',
   otp: 'zanix:otp',
 }
@@ -95,3 +96,21 @@ export const SERVICE_RATE_LIMIT_ENV = 'SERVICE_RATE_LIMIT'
  * list (`utils/sessions/block-list.ts`), and rate limiting (`utils/sessions/rate-limit.ts`).
  */
 export const REDIS_URI_ENV = 'REDIS_URI'
+
+/**
+ * Env var controlling the rotation grace window: how long, in seconds, a just-rotated refresh
+ * token keeps its already-issued replacement pair retrievable instead of outright rejecting a
+ * second presentation of that same token as blocklisted (`utils/sessions/block-list.ts#{@link
+ * getRotationGraceTokens}`/`{@link setRotationGraceTokens}`, consulted from
+ * `utils/sessions/refresh.ts#refreshSessionTokensBase`). A TTL string (e.g. `'5s'`, `'10s'`) or a
+ * bare number of seconds; `'0'` disables the grace window outright, making rotation strictly
+ * single-use with no tolerance window. Defaults to `'5s'` when unset.
+ *
+ * This exists because a single-use refresh token has no tolerance, by itself, for two legitimate
+ * requests that both present the same still-valid token within a short window of each other — a
+ * browser prefetching a link on hover and then navigating it, a double click, two tabs sharing one
+ * session, or a client's own retry after a slow response. Without this window, whichever of the two
+ * requests reaches the blocklist check second is rejected outright, even though it carried the same
+ * legitimate token as the one that won.
+ */
+export const ROTATION_GRACE_WINDOW_ENV = 'ROTATION_GRACE_WINDOW'

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-09-03
+
+### Fixed
+
+- **Refresh-token rotation grace window** — `refreshSessionTokensBase` (and everything built on it:
+  `refreshSessionTokens`, `session.refreshTokens()`, `pageSessionGuard`) no longer rejects a
+  legitimate second request that presents the same, still-valid-at-send-time refresh token a moment
+  after another request already rotated it. Rotation is still strictly single-use, but a token just
+  rotated within the configurable grace window (`ROTATION_GRACE_WINDOW`, default `5s`) now hands
+  back the pair that earlier rotation already issued instead of a spurious `401`. Closes the class
+  of bug where a browser prefetching a link on hover and then navigating it, a double click, or two
+  tabs sharing one session could each send two near-simultaneous requests to the same
+  `pageSessionGuard`-protected page and have the second one bounced to login. Reuse detection past
+  the grace window is unchanged; set `ROTATION_GRACE_WINDOW=0` to disable the window outright and
+  restore the old strict, zero-tolerance behavior.
+
 ## [1.1.0] - 2026-09-02
 
 ### Added

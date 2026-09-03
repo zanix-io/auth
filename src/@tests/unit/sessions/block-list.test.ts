@@ -5,8 +5,11 @@ import {
   addTokenToBlockList,
   addTokenToBlockListBase,
   checkTokenBlockList,
+  getRotationGraceTokens,
+  setRotationGraceTokens,
 } from 'utils/sessions/block-list.ts'
 import { createJWT } from 'utils/jwt/create.ts'
+import { ROTATION_GRACE_WINDOW_ENV } from 'utils/constants.ts'
 
 Deno.test('checkTokenBlockList falls back to KV store and caches the value locally', async () => {
   Deno.env.delete('REDIS_URI')
@@ -83,5 +86,94 @@ Deno.test(
       HttpError,
     )
     assertEquals(error.status.value, 400)
+  },
+)
+
+// ── The rotation grace window: setRotationGraceTokens/getRotationGraceTokens ──
+
+Deno.test(
+  'setRotationGraceTokens/getRotationGraceTokens: round-trips a pair through local cache, ' +
+    'falling back to KV like checkTokenBlockList does',
+  async () => {
+    Deno.env.delete('REDIS_URI')
+
+    const local = new Map<string, unknown>()
+    const kv = new Map<string, unknown>()
+    const cache = {
+      local: {
+        get: (key: string) => local.get(key),
+        set: (key: string, value: unknown) => local.set(key, value),
+      },
+    } as any
+    const kvDb = {
+      get: (key: string) => kv.get(key),
+      set: (key: string, value: unknown) => kv.set(key, value),
+    } as any
+
+    const tokens = { accessToken: 'a-token', refreshToken: 'r-token' }
+    await setRotationGraceTokens('some-jti', tokens, cache, kvDb)
+
+    // Written to both tiers, same as addTokenToBlockListBase's own local/KV write.
+    assertEquals(await getRotationGraceTokens('some-jti', cache, kvDb), tokens)
+
+    // A fresh local cache with nothing in it falls back to KV, exactly like checkTokenBlockList.
+    const freshLocal = new Map<string, unknown>()
+    const freshCache = {
+      local: {
+        get: (key: string) => freshLocal.get(key),
+        set: (key: string, value: unknown) => freshLocal.set(key, value),
+      },
+    } as any
+    assertEquals(await getRotationGraceTokens('some-jti', freshCache, kvDb), tokens)
+  },
+)
+
+Deno.test('getRotationGraceTokens returns undefined once nothing was ever set for that jti', async () => {
+  Deno.env.delete('REDIS_URI')
+
+  const cache = { local: { get: () => undefined, set: () => {} } } as any
+  const kvDb = { get: () => undefined } as any
+
+  assertEquals(await getRotationGraceTokens('never-rotated', cache, kvDb), undefined)
+})
+
+Deno.test('setRotationGraceTokens is a no-op once ROTATION_GRACE_WINDOW=0 disables the window', async () => {
+  Deno.env.delete('REDIS_URI')
+  Deno.env.set(ROTATION_GRACE_WINDOW_ENV, '0')
+
+  const sets: unknown[] = []
+  const cache = {
+    local: { get: () => undefined, set: (...args: unknown[]) => sets.push(args) },
+  } as any
+
+  await setRotationGraceTokens('some-jti', { accessToken: 'a', refreshToken: 'r' }, cache)
+
+  assertEquals(sets.length, 0)
+
+  Deno.env.delete(ROTATION_GRACE_WINDOW_ENV)
+})
+
+Deno.test(
+  'setRotationGraceTokens/getRotationGraceTokens: use the Redis path when REDIS_URI is set',
+  async () => {
+    Deno.env.set('REDIS_URI', 'redis://localhost:6379')
+
+    const saved: unknown[] = []
+    const tokens = { accessToken: 'a-token', refreshToken: 'r-token' }
+    const cache = {
+      saveToCaches: (options: unknown) => {
+        saved.push(options)
+        return Promise.resolve()
+      },
+      getCachedOrFetch: () => Promise.resolve(tokens),
+    } as any
+
+    await setRotationGraceTokens('some-jti', tokens, cache)
+    assertEquals(saved.length, 1)
+    assertEquals((saved[0] as { value: unknown }).value, tokens)
+
+    assertEquals(await getRotationGraceTokens('some-jti', cache), tokens)
+
+    Deno.env.delete('REDIS_URI')
   },
 )

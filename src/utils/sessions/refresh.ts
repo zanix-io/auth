@@ -9,9 +9,14 @@ import {
   type ZanixKVConnector,
 } from '@zanix/server'
 import { HttpError, PermissionDenied } from '@zanix/errors'
-import { addTokenToBlockListBase, checkTokenBlockList } from './block-list.ts'
+import {
+  addTokenToBlockListBase,
+  checkTokenBlockList,
+  getRotationGraceTokens,
+  setRotationGraceTokens,
+} from './block-list.ts'
 import { getSecretByToken } from '../jwt/secrets.ts'
-import { generateSessionTokens } from './create.ts'
+import { applySessionTokens, generateSessionTokens } from './create.ts'
 import { invalidRefreshTokenError } from './errors.ts'
 import { verifyJWT } from '../jwt/verify.ts'
 import { toJwtHttpError } from '../jwt/verification-error.ts'
@@ -26,6 +31,13 @@ import { toJwtHttpError } from '../jwt/verification-error.ts'
  * token is blocklisted as part of this same call (single-use rotation) — a later attempt to
  * refresh with that same token is then rejected as blocklisted, the mechanism that also catches a
  * stolen token being replayed after the legitimate client already rotated past it.
+ *
+ * A presented token that's already blocklisted isn't rejected outright: within the rotation grace
+ * window ({@link ROTATION_GRACE_WINDOW_ENV} in `utils/constants.ts`, default `5s`), the token this
+ * call already rotated it into is looked up (`getRotationGraceTokens`) and returned again instead —
+ * the tolerance a second, legitimately near-simultaneous request needs (a browser prefetching a
+ * link on hover and then navigating it, a double click, two tabs on one session) without weakening
+ * reuse detection past that short window.
  *
  * @param {ScopedContext} ctx
  *   The scoped context containing configuration and services required
@@ -90,6 +102,21 @@ export const refreshSessionTokensBase = async (
     )
 
     if (isInBlockList) {
+      // Blocklisted doesn't necessarily mean reused: a legitimate second request can present this
+      // same token a moment after another request already rotated it (browser prefetch-then-click,
+      // a double click, two tabs on one session). While that rotation is still within its grace
+      // window, hand back the pair it already issued instead of rejecting a request that carried a
+      // genuinely legitimate token.
+      const graceTokens = await getRotationGraceTokens(payload.jti, options.cache, options.kvDb)
+
+      if (graceTokens) {
+        // `generateSessionTokens` never ran for THIS request, so `ctx.locals.session` — what
+        // every downstream permission check/response interceptor actually reads — is still
+        // populated from THIS pair, same as a freshly minted one would.
+        applySessionTokens(ctx, graceTokens)
+        return { ...graceTokens, oldToken: currentRefreshToken, payload }
+      }
+
       throw new PermissionDenied(
         'The refresh token has been revoked or is blocklisted.',
       )
@@ -109,6 +136,11 @@ export const refreshSessionTokensBase = async (
   // the token this call issued stays live until its own `exp`; this is a real, deliberate
   // tradeoff for callers that don't have blocklist infra, not a silent gap.
   if (options.cache) {
+    // Written BEFORE the blocklist entry below, not after — a concurrent request can only ever
+    // observe this token as blocklisted once its grace entry already exists to answer it, closing
+    // the window where that request would otherwise see "blocklisted" but find no grace entry yet
+    // and get rejected regardless.
+    await setRotationGraceTokens(payload.jti, tokens, options.cache, options.kvDb)
     await addTokenToBlockListBase(currentRefreshToken, options.cache, options.kvDb)
   }
 
