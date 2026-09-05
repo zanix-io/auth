@@ -176,11 +176,10 @@ margin exists so a session that goes quiet right around the moment its rotation 
 kicks in still has real room left on the refresh token's own absolute lifetime: without it, the
 refresh token could expire for real (a `verifyJWT` rejection, which runs BEFORE any rotation
 decision ever gets a chance to run) before a legitimate, still-active session gets a chance to renew
-it — forcing a real re-login instead of a seamless rotation. `refreshExpiration`'s own type
-(`'1w'`/`'1mo'`/`'6mo'`/`'1y'`) already clears this margin against any allowed `accessExpiration`
-(capped at `'1h'` by `createAccessToken`), so a type-honest TypeScript caller can't actually trigger
-this — the runtime check mainly guards a caller bypassing the type, or one calling these functions
-from plain JavaScript.
+it — forcing a real re-login instead of a seamless rotation. `accessExpiration`/`refreshExpiration`
+accept any duration string `parseTTL` understands (`'45m'`, `'7d'`, `'6mo'`, ...) or a plain number
+of seconds, so this ratio is enforced by `generateSessionTokens()` itself at call time, for a
+TypeScript caller and a plain-JavaScript one alike.
 
 ### `pageSessionGuard`'s rotation cadence: not every page load
 
@@ -196,11 +195,28 @@ instead of on every single page load.
 
 `deriveSessionToken`/`deriveSessionTokenBase` accept the same `rotateRefresh?: boolean` override for
 a call site that needs to force one decision or the other regardless of the automatic freshness
-check — `true` forces a rotation even for a fresh token (e.g. right before a sensitive action, to
-invalidate any other copy of the current refresh token in circulation); `false` forces reuse even
-for a stale one. Forcing `false` on the only call site that ever presents a given refresh token
-means that token's absolute lifetime is never renewed by this call — it lapses at its own `exp` if
-nothing else ever rotates it, a deliberate consequence of opting out, not a bug.
+check — `true` forces a rotation even for a fresh token; `false` forces reuse even for a stale one.
+Forcing `false` on the only call site that ever presents a given refresh token means that token's
+absolute lifetime is never renewed by this call — it lapses at its own `exp` if nothing else ever
+rotates it, a deliberate consequence of opting out, not a bug.
+
+`pageSessionGuard(roles, options)` forwards this same `options.rotateRefresh` straight to
+`deriveSessionToken`. Reach for either direction only on a page that genuinely needs a different
+cadence than the automatic default, never as a default habit:
+
+- **`false`** fits a high-traffic, low-sensitivity page that would rather never pay a rotation's
+  mint + blocklist-write cost on its own path — the session still rotates normally the next time any
+  OTHER protected page (without the override) is loaded.
+- **`true`** fits a page whose OWN load is the sensitive operation, with no separate action moment
+  to hook a one-off `deriveSessionToken`/`mintAccessToken` call into instead — a loader that
+  forwards the session against a downstream credential exchange enforcing its own single-use
+  rotation is the concrete case. For the more common "force a fresh token right before a sensitive
+  action" need, where that action IS a distinct moment separate from any page load (a REST handler a
+  page's own form submits to, say), a direct one-off call at that exact moment stays the better fit
+  — tagging the whole recurring page guard as "always rotate" for that case only reintroduces the
+  identical every-load cost the automatic freshness check exists to avoid, for every user who
+  happens to reload or revisit the page, with no real security benefit over letting the freshness
+  check decide.
 
 ---
 
@@ -226,12 +242,13 @@ When a valid session is present, the following headers may be added to the respo
   All four share `<refreshTokenSeconds>` — the refresh token's own expiration (e.g. ~1 year) —
   whenever a refresh token is issued alongside them. They only fall back to the access token's own,
   much shorter expiration (capped at 1h) for a session with no refresh token at all (an `'api'`
-  session, which has no refresh-token concept to begin with). Tying the other three to the access
-  token even when a refresh token exists would let them expire out from under a still-alive session:
-  once a browser drops the now-expired `X-Znx-Cookies-Accepted`, `checkAcceptedCookies()` falls back
-  to `false` on every later request, and `getSessionHeaders()` then withholds every session
-  `Set-Cookie` for it — not just a stray one, but a normal refresh-token rotation and even a later
-  logout/revoke's own clearing cookie — while `X-Znx-App-Token` itself is still genuinely valid.
+  session, which has no refresh-token concept to begin with). This keeps `X-Znx-Cookies-Accepted`
+  alive for exactly as long as the session it gates: a browser that still holds `X-Znx-App-Token`
+  never drops the consent cookie out from under it.
+
+  A revoked session (`sessionStatus: 'revoked'`, only ever produced by `revokeSessionToken`) sends
+  this same batch at `Max-Age=0` regardless of `X-Znx-Cookies-Accepted` — see "Cookie consent
+  classification" below.
 
 > These header names come from the `AUTH_HEADERS`/`SESSION_HEADERS`/`GENERAL_HEADERS` constants,
 > exported from `@zanix/server` (not from `@zanix/auth` itself) — see `@zanix/server`'s
@@ -248,6 +265,13 @@ consent** — `checkAcceptedCookies()` (`utils/sessions/headers.ts`) requires
 `x-znx-<type>-session-status`/`x-znx-<type>-id` are always sent as plain response headers — it just
 never persists across page loads; nothing here breaks by omission the way it would if `X-Znx-Csrf`
 were skipped.
+
+The one exception: `getSessionHeaders()` bypasses this gate for a revoked session
+(`sessionStatus: 'revoked'`), sending the clearing `Set-Cookie` batch (`Max-Age=0`) unconditionally.
+Removing a cookie stores no new value and tracks nothing, so it needs no consent — and a plain,
+no-JS `<form method="post">` logout has no way to attach the `X-Znx-Cookies-Accepted` header, so a
+revoke that stayed behind the consent gate could leave the client holding cookies for a session
+`revokeSessionToken` already invalidated server-side.
 
 Suggested classification for a consuming app's own cookie-consent banner: **`X-Znx-App-Token` (the
 refresh token) is genuinely NOT "strictly necessary"** — the whole point of gating it is that the

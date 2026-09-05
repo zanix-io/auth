@@ -197,6 +197,49 @@ Deno.test('getSessionHeaders zeroes the refresh cookie when invalidated', async 
   assertMatch(consentCookie, /Max-Age=0;/)
 })
 
+Deno.test(
+  'getSessionHeaders clears cookies for a revoked session even without cookiesAccepted',
+  async () => {
+    // A plain, no-JS `<form method="post">` logout has no way to attach the
+    // `X-Znx-Cookies-Accepted` header, and its consent cookie may already be gone by the time it
+    // navigates — a revoked session clears every cookie regardless.
+    const refreshToken = await createJWT({}, 'my-secret', { expiration: '1y' })
+
+    const { 'Set-Cookie': cookies } = getSessionHeaders({
+      cookiesAccepted: false,
+      sessionStatus: 'revoked',
+      type: 'user',
+      subject: 'alice',
+      expiration: 0,
+      refreshToken,
+    })
+
+    const appTokenCookie = cookies.find((cookie) => cookie.startsWith('X-Znx-App-Token='))
+    const statusCookie = cookies.find((cookie) => cookie.startsWith('X-Znx-User-Session-Status='))
+    const consentCookie = cookies.find((cookie) => cookie.startsWith('X-Znx-Cookies-Accepted='))
+
+    for (const cookie of [appTokenCookie, statusCookie, consentCookie]) {
+      assert(cookie)
+      assertMatch(cookie, /Max-Age=0;/)
+    }
+  },
+)
+
+Deno.test(
+  'getSessionHeaders withholds cookies for a non-revoked session without cookiesAccepted',
+  () => {
+    const { 'Set-Cookie': cookies } = getSessionHeaders({
+      cookiesAccepted: false,
+      sessionStatus: 'active',
+      type: 'user',
+      subject: 'alice',
+      expiration: Math.floor(Date.now() / 1000) + 3600,
+    })
+
+    assert(!cookies.length)
+  },
+)
+
 Deno.test('getSessionHeaders clears the refresh cookie when there is no refresh token', () => {
   const { 'Set-Cookie': cookies } = getSessionHeaders({
     cookiesAccepted: true,

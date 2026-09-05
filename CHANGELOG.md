@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-09-05
+
+### Added
+
+- **`pageSessionGuard`'s `options.rotateRefresh` now accepts `true`, not just `false`.** Forces a
+  real rotation on every load of that page, even for a token that's still fresh — for a page whose
+  own load is the sensitive operation, with no separate action moment to hook a one-off
+  `deriveSessionToken`/`mintAccessToken` call into instead (a loader that forwards the session
+  against a downstream credential exchange enforcing its own single-use rotation, for instance).
+  `false` keeps its existing meaning (never rotate on this page); omitted keeps the automatic
+  freshness check.
+
+### Fixed
+
+- **A revoked session now clears its cookies even when the request carries no cookie consent
+  signal.** `getSessionHeaders()` gated every `Set-Cookie` it produces — the clearing ones included
+  — behind `X-Znx-Cookies-Accepted`. A plain, no-JS `<form method="post">` logout can't attach that
+  header, and its consent cookie can already be gone by the time it navigates, so
+  `checkAcceptedCookies()` fell back to `false` and withheld every clearing cookie even though
+  `revokeSessionToken()` had already revoked the token server-side. A revoked session
+  (`sessionStatus: 'revoked'`) now bypasses the consent gate for its own clearing batch — removing a
+  cookie stores no new value and tracks nothing, so it needs no consent.
+- **`AuthSessionOptions.accessExpiration`/`refreshExpiration` accept any duration string `parseTTL`
+  understands**, not just the previously enumerated literals (`'30m'`/`'1h'` for access,
+  `'1w'`/`'1mo'`/`'6mo'`/`'1y'` for refresh). A value like `'45m'` or `'7d'` — already valid at
+  runtime — failed to type-check and needed a cast to compile. The new `TTLDuration` type matches
+  the full `s`/`m`/`h`/`d`/`w`/`mo`/`y` suffix set `parseTTL` (`@zanix/helpers`) actually parses.
+
 ## [1.2.0] - 2026-09-05
 
 ### Added

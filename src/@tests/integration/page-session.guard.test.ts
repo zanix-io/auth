@@ -252,3 +252,45 @@ Deno.test(
     Deno.env.delete('JWT_KEY')
   },
 )
+
+Deno.test(
+  'pageSessionGuard: { rotateRefresh: false } forces reuse even for a stale token',
+  async () => {
+    Deno.env.set('JWT_KEY', 'my secret')
+
+    // Stale on purpose: without the override, `deriveSessionToken`'s own automatic freshness check
+    // would rotate this one — the override must win over that default.
+    const refreshToken = await mintStaleRefreshToken(['admin'])
+    const ctx = createCtx({ 'X-Znx-App-Token': refreshToken })
+
+    const guard = pageSessionGuard(['admin'], { rotateRefresh: false })
+    const result = await guard(ctx)
+
+    assertEquals(result, {})
+    assertEquals(ctx.locals.session.token, refreshToken)
+    assertEquals(ctx.locals.session.scope, ['admin'])
+
+    Deno.env.delete('JWT_KEY')
+  },
+)
+
+Deno.test(
+  'pageSessionGuard: { rotateRefresh: true } forces rotation even for a fresh token',
+  async () => {
+    Deno.env.set('JWT_KEY', 'my secret')
+
+    // Fresh on purpose: without the override, `deriveSessionToken`'s own automatic freshness check
+    // would reuse this one as-is — the override must win over that default, in the other direction.
+    const refreshToken = await mintRefreshToken(['admin'])
+    const ctx = createCtx({ 'X-Znx-App-Token': refreshToken })
+
+    const guard = pageSessionGuard(['admin'], { rotateRefresh: true })
+    const result = await guard(ctx)
+
+    assertEquals(result, {})
+    assertNotEquals(ctx.locals.session.token, refreshToken)
+    assertEquals(ctx.locals.session.scope, ['admin'])
+
+    Deno.env.delete('JWT_KEY')
+  },
+)

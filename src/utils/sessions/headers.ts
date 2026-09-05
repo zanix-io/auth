@@ -27,15 +27,22 @@ const { cookiesAcceptedHeader } = GENERAL_HEADERS
  *   `Max-Age` is what the session status/subject/cookie-consent cookies get too — never
  *   `expiration`'s own, much shorter one — so the consent signal that gates this whole function
  *   never expires out from under a session the refresh-token cookie still keeps alive.
- * - If `cookiesAccepted` is `false`, no cookies are added.
+ * - If `cookiesAccepted` is `false`, no cookies are added — unless `sessionStatus` is `'revoked'`,
+ *   in which case the clearing `Set-Cookie` entries (`Max-Age=0`) are still sent: a real revoke
+ *   clears whatever cookies the client holds regardless of consent, since removing a cookie stores
+ *   no new value and tracks nothing.
  *
  * Defaults:
  * - `sessionStatus` defaults to `"unconfirmed"` if not provided.
  * - `maxAge` defaults to `0` (immediately expires the cookie) when `expiration` is omitted.
  *
  * @param {Object} options - Configuration for generating session-related headers.
- * @param {boolean} options.cookiesAccepted - Whether the user has accepted cookies.
- * @param {SessionStatus} [options.sessionStatus='unconfirmed'] - Indicates whether the session is active.
+ * @param {boolean} options.cookiesAccepted - Whether the user has accepted cookies. Ignored when
+ *                                            `sessionStatus` is `'revoked'` — clearing cookies never
+ *                                            needs consent.
+ * @param {SessionStatus} [options.sessionStatus='unconfirmed'] - Indicates whether the session is
+ *                                          active. `'revoked'` also bypasses the `cookiesAccepted`
+ *                                          gate, so the clearing cookies always reach the client.
  * @param {string} options.subject - The subject/user identifier included in headers and cookies.
  * @param {'user' | 'api'} options.type - Determines which session and subject headers/cookies to use.
  * @param {number} [options.expiration=0] - The access token's expiration (Unix timestamp). Used to
@@ -79,7 +86,15 @@ export function getSessionHeaders(options: {
     [subjectHeader]: subject,
   } as Headers
 
-  if (cookiesAccepted) {
+  // Clearing a cookie carries none of the privacy footprint SETTING one does — no new value is
+  // stored, nothing new is tracked — so a real revoke must not depend on `cookiesAccepted` the way
+  // a fresh/renewed cookie does. `sessionStatus === 'revoked'` is only ever passed by
+  // `revokeSessionToken` (`utils/sessions/revoke.ts`), so this bypass only ever fires for an
+  // already-completed server-side revoke, never for an ordinary session response. A plain no-JS
+  // `<form method="post">` logout can't attach the `X-Znx-Cookies-Accepted` header at all, and its
+  // consent cookie may already be gone by the time it navigates — this keeps the clearing cookies
+  // reaching the client regardless.
+  if (cookiesAccepted || sessionStatus === 'revoked') {
     const nowInSeconds = Math.floor(Date.now() / 1000) // current Unix timestamp
     const accessMaxAge = Math.max(0, Math.floor(expiration - nowInSeconds))
 

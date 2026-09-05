@@ -146,16 +146,26 @@ export type AppTokenOptions<T extends SessionTypes> = {
   encryptionKey?: 'api' extends T ? string : never
 }
 
+/**
+ * A duration string `parseTTL` (`@zanix/helpers`) accepts: a run of digits followed by one of its
+ * supported unit suffixes — `s`/`m`/`h`/`d`/`w`/`mo`/`y` for seconds/minutes/hours/days/weeks/
+ * months/years (e.g. `'45m'`, `'7d'`, `'6mo'`). `${number}` also matches shapes `parseTTL`'s own
+ * digits-only pattern rejects (a decimal, a negative sign, scientific notation) — those still
+ * reach `parseTTL` and throw there; TypeScript has no integer-only primitive to narrow this
+ * further at the type level.
+ */
+export type TTLDuration = `${number}${'s' | 'm' | 'h' | 'd' | 'w' | 'mo' | 'y'}`
+
 export type AccessTokenOptions<T extends SessionTypes> =
   & Omit<AppTokenOptions<T>, 'expiration'>
   & {
-    expiration: '30m' | '1h' | number
+    expiration: TTLDuration | number
   }
 
 export type RefreshTokenOptions<T extends SessionTypes> =
   & Omit<AppTokenOptions<T>, 'expiration'>
   & {
-    expiration: '1w' | '1mo' | '6mo' | '1y'
+    expiration: TTLDuration | number
   }
 
 /**

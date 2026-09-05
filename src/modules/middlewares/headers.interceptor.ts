@@ -33,6 +33,8 @@ import {
  *           - X-Znx-Cookies-Accepted=true; Max-Age=<seconds>; Path=/; HttpOnly; Secure; SameSite=Strict
  *
  * - `Max-Age` is calculated from the session expiration timestamp minus the current Unix time.
+ * - A revoked session (`status: 'revoked'`) always gets the same `Set-Cookie` batch, at
+ *   `Max-Age=0`, regardless of `X-Znx-Cookies-Accepted` — see `getSessionHeaders`'s own doc.
  *
  * @returns {MiddlewareInterceptor}
  *   A middleware interceptor function that enriches the response with

@@ -4,6 +4,8 @@ import type {
   RefreshTokenOptions,
   SessionTokens,
   SessionTypes,
+  // deno-lint-ignore no-unused-vars
+  TTLDuration,
 } from './sessions.ts'
 import type { JWTAlgorithm, JWTPayload, JWTVerifyOptions } from './jwt.ts'
 
@@ -92,14 +94,14 @@ export type AuthSessionOptions = {
   /** Optional extra data to save in access token's payload */
   payload?: Record<string, unknown>
   /**
-   * The access token's lifetime, as a human-readable string (e.g. `'30m'`, `'1h'`) or a number of
-   * seconds. Defaults to `'1h'`. Bound by the same 1-hour ceiling `createAccessToken` already
-   * enforces on any value that reaches it through this option.
+   * The access token's lifetime — a {@link TTLDuration} string (e.g. `'30m'`, `'1h'`, `'45m'`) or a
+   * number of seconds. Defaults to `'1h'`. Bound by the same 1-hour ceiling `createAccessToken`
+   * already enforces on any value that reaches it through this option.
    */
   accessExpiration?: AccessTokenOptions<'user'>['expiration']
   /**
-   * The refresh token's lifetime, as a human-readable string (e.g. `'1w'`, `'1y'`) or a number of
-   * seconds. Defaults to `'1y'`. Must be at least `MIN_REFRESH_TO_ACCESS_RATIO` times
+   * The refresh token's lifetime — a {@link TTLDuration} string (e.g. `'1w'`, `'6mo'`, `'1y'`) or a
+   * number of seconds. Defaults to `'1y'`. Must be at least `MIN_REFRESH_TO_ACCESS_RATIO` times
    * `accessExpiration` — `generateSessionTokens` rejects a narrower margin, since a refresh token
    * that expires too close to the cadence it gets renewed at can lapse for real before a
    * legitimate, still-active session ever gets a chance to renew it.
