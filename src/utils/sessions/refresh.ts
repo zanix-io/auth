@@ -22,6 +22,77 @@ import { verifyJWT } from '../jwt/verify.ts'
 import { toJwtHttpError } from '../jwt/verification-error.ts'
 
 /**
+ * A presented refresh token that resolved to an already-rotated pair still sitting in its
+ * rotation-grace window (see {@link resolveVerifiedRefreshToken}'s own doc) — the caller hands
+ * this pair back to its own caller as-is, exactly like a freshly rotated one.
+ */
+type GraceHit = { graceTokens: SessionTokens; currentRefreshToken: string; payload: JWTPayload }
+
+/** A presented refresh token that verified cleanly and isn't blocklisted — free to reuse or rotate. */
+type VerifiedMiss = { graceTokens: undefined; currentRefreshToken: string; payload: JWTPayload }
+
+/**
+ * Resolves and verifies the refresh token a caller presented (from `token`, or the session cookie
+ * when omitted), shared by {@link refreshSessionTokensBase} and `deriveSessionTokenBase`
+ * (`utils/sessions/derive.ts`) — both need the identical signature/blocklist/grace-window handling
+ * before diverging on what happens next (a full rotation vs. a cheaper claims-only derivation).
+ *
+ * Checking the blocklist and, on a hit, the rotation-grace cache is gated on `options.cache` alone
+ * — see {@link refreshSessionTokensBase}'s own doc for why requiring `options.kvDb` too would skip
+ * this check for a caller who wired `cache` (with Redis) but not `kvDb`.
+ *
+ * @throws {HttpError} If no token was presented at all.
+ * @throws {HttpError} If the presented token isn't a refresh token (no embedded `payload.access`).
+ * @throws {PermissionDenied} If verification fails, or the token is blocklisted with no rotation-
+ * grace entry to answer it (a genuine reuse, not a near-simultaneous legitimate retry).
+ */
+export async function resolveVerifiedRefreshToken(
+  ctx: ScopedContext,
+  token: string | undefined,
+  options: { cache?: ZanixCacheProvider; kvDb?: ZanixKVConnector },
+): Promise<GraceHit | VerifiedMiss> {
+  const { token: tokenHeader } = SESSION_HEADERS['user']
+
+  const currentRefreshToken = token || ctx.cookies[tokenHeader]
+
+  const { metaError, error } = invalidRefreshTokenError('refreshSessionTokens')
+
+  if (!currentRefreshToken) throw error
+
+  const secret = getSecretByToken(currentRefreshToken)
+
+  const payload = await verifyJWT(currentRefreshToken, secret)
+
+  if (!payload.access) {
+    throw new HttpError('FORBIDDEN', {
+      code: 'INVALID_TOKEN',
+      cause: 'The provided refresh token is invalid. It appears to be an access token.',
+      meta: metaError,
+    })
+  }
+
+  if (options.cache) {
+    const isInBlockList = await checkTokenBlockList(
+      payload.jti,
+      options.cache,
+      options.kvDb,
+    )
+
+    if (isInBlockList) {
+      const graceTokens = await getRotationGraceTokens(payload.jti, options.cache, options.kvDb)
+
+      if (graceTokens) return { graceTokens, currentRefreshToken, payload }
+
+      throw new PermissionDenied(
+        'The refresh token has been revoked or is blocklisted.',
+      )
+    }
+  }
+
+  return { graceTokens: undefined, currentRefreshToken, payload }
+}
+
+/**
  * Refreshes the session tokens using the provided JWT.
  *
  * Verifies the given refresh token, then generates a new set of session tokens based on the
@@ -65,62 +136,15 @@ export const refreshSessionTokensBase = async (
     sessionOptions?: Partial<AuthSessionOptions>
   } = {},
 ): Promise<SessionTokens & { oldToken: string; payload: JWTPayload }> => {
-  const { token: tokenHeader } = SESSION_HEADERS['user']
+  const resolved = await resolveVerifiedRefreshToken(ctx, token, options)
+  const { currentRefreshToken, payload } = resolved
 
-  const currentRefreshToken = token || ctx.cookies[tokenHeader]
-
-  const { metaError, error } = invalidRefreshTokenError('refreshSessionTokens')
-
-  if (!currentRefreshToken) throw error
-
-  const secret = getSecretByToken(currentRefreshToken)
-
-  const payload = await verifyJWT(currentRefreshToken, secret)
-
-  if (!payload.access) {
-    throw new HttpError('FORBIDDEN', {
-      code: 'INVALID_TOKEN',
-      cause: 'The provided refresh token is invalid. It appears to be an access token.',
-      meta: metaError,
-    })
-  }
-
-  // Check token in block list. This is also what catches REUSE of an already-rotated token: a
-  // successful refresh below always blocklists the token it consumed, so presenting that same
-  // token again — e.g. a stolen cookie replayed after the legitimate client already refreshed —
-  // lands here and is rejected, not silently accepted.
-  //
-  // Gated on `cache` alone, same as the blocklist write below — `checkTokenBlockList`'s `kvDb` is
-  // optional (a fallback for the non-Redis path only; the Redis path never touches it), so
-  // requiring it here would skip the check for a caller who wired `cache` (with Redis) but not
-  // `kvDb`, even though the write below would still succeed and reuse would go undetected.
-  if (options.cache) {
-    const isInBlockList = await checkTokenBlockList(
-      payload.jti,
-      options.cache,
-      options.kvDb,
-    )
-
-    if (isInBlockList) {
-      // Blocklisted doesn't necessarily mean reused: a legitimate second request can present this
-      // same token a moment after another request already rotated it (browser prefetch-then-click,
-      // a double click, two tabs on one session). While that rotation is still within its grace
-      // window, hand back the pair it already issued instead of rejecting a request that carried a
-      // genuinely legitimate token.
-      const graceTokens = await getRotationGraceTokens(payload.jti, options.cache, options.kvDb)
-
-      if (graceTokens) {
-        // `generateSessionTokens` never ran for THIS request, so `ctx.locals.session` — what
-        // every downstream permission check/response interceptor actually reads — is still
-        // populated from THIS pair, same as a freshly minted one would.
-        applySessionTokens(ctx, graceTokens)
-        return { ...graceTokens, oldToken: currentRefreshToken, payload }
-      }
-
-      throw new PermissionDenied(
-        'The refresh token has been revoked or is blocklisted.',
-      )
-    }
+  if (resolved.graceTokens) {
+    // `generateSessionTokens` never ran for THIS request, so `ctx.locals.session` — what every
+    // downstream permission check/response interceptor actually reads — is still populated from
+    // THIS pair, same as a freshly minted one would.
+    applySessionTokens(ctx, resolved.graceTokens)
+    return { ...resolved.graceTokens, oldToken: currentRefreshToken, payload }
   }
 
   const tokens = await generateSessionTokens(ctx, { ...payload.access, ...options.sessionOptions })

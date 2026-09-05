@@ -142,3 +142,90 @@ Deno.test('createAccessToken throws InternalError when expiration exceeds 1 hour
 
   Deno.env.delete('JWT_KEY')
 })
+
+Deno.test('createAppToken sets iat alongside exp, from the same timestamp', async () => {
+  Deno.env.set('JWT_KEY', 'my secret')
+
+  const before = Math.floor(Date.now() / 1000)
+  const token = await createAppToken({
+    subject: 'user@example.com',
+    type: 'user',
+    expiration: '1h',
+  })
+  const { payload } = decodeJWT(token)
+
+  assert(payload.iat)
+  assert(payload.exp)
+  assertAlmostEquals(payload.iat, before, 2)
+  assertEquals(payload.exp - payload.iat, parseTTL('1h'))
+
+  Deno.env.delete('JWT_KEY')
+})
+
+Deno.test('generateSessionTokens forwards custom accessExpiration/refreshExpiration', async () => {
+  Deno.env.set('JWT_KEY', 'my secret')
+
+  const tokens = await generateSessionTokens({ locals: {} } as never, {
+    subject: 'user@example.com',
+    accessExpiration: '30m',
+    refreshExpiration: '6mo',
+  })
+
+  const access = decodeJWT(tokens.accessToken)
+  const refresh = decodeJWT(tokens.refreshToken)
+
+  assert(access.payload.exp)
+  assert(access.payload.iat)
+  assert(refresh.payload.exp)
+  assert(refresh.payload.iat)
+  assertAlmostEquals(access.payload.exp - access.payload.iat, parseTTL('30m'), 2)
+  assertAlmostEquals(refresh.payload.exp - refresh.payload.iat, parseTTL('6mo'), 2)
+
+  Deno.env.delete('JWT_KEY')
+})
+
+Deno.test(
+  'generateSessionTokens throws InternalError when refreshExpiration is not at least ' +
+    'MIN_REFRESH_TO_ACCESS_RATIO times accessExpiration',
+  async () => {
+    Deno.env.set('JWT_KEY', 'my secret')
+
+    // `refreshExpiration`'s own type only offers `'1w'`/`'1mo'`/`'6mo'`/`'1y'` — every one of those
+    // already clears the 3x margin against any allowed `accessExpiration` (capped at `'1h'` by
+    // `createAccessToken` itself), so a type-honest caller can never actually hit this. The runtime
+    // check still guards a non-TypeScript caller, or one that bypasses the type as `as never` — as
+    // done here to construct the violation this test asserts against.
+    const error = await assertRejects(
+      () =>
+        generateSessionTokens({ locals: {} } as never, {
+          subject: 'user@example.com',
+          accessExpiration: '1h',
+          // Only 2x accessExpiration (in seconds) — below the required 3x margin.
+          refreshExpiration: 7200,
+        } as never),
+      InternalError,
+    )
+    assertEquals(error.code, 'AUTH_SESSION_INVALID_EXPIRATION')
+
+    Deno.env.delete('JWT_KEY')
+  },
+)
+
+Deno.test(
+  'generateSessionTokens accepts refreshExpiration exactly at the MIN_REFRESH_TO_ACCESS_RATIO boundary',
+  async () => {
+    Deno.env.set('JWT_KEY', 'my secret')
+
+    const tokens = await generateSessionTokens({ locals: {} } as never, {
+      subject: 'user@example.com',
+      accessExpiration: '1h',
+      // Exactly 3x accessExpiration (in seconds) — the required minimum, not below it. See the
+      // previous test's own note on why this needs `as never` to bypass `refreshExpiration`'s type.
+      refreshExpiration: 10800,
+    } as never)
+
+    assert(tokens.refreshToken)
+
+    Deno.env.delete('JWT_KEY')
+  },
+)

@@ -89,12 +89,15 @@ export { createJWT } from 'utils/jwt/create.ts'
 export { verifyJWT } from 'utils/jwt/verify.ts'
 export { decodeJWT } from 'utils/jwt/decode.ts'
 export {
+  DEFAULT_ACCESS_EXPIRATION,
   DEFAULT_AUTH_ISSUER,
+  DEFAULT_REFRESH_EXPIRATION,
   JWK_ID_ENV,
   JWK_PRI_ENV,
   JWK_PUB_ENV,
   JWK_ROTATION_CYCLE_ENV,
   JWT_KEY_ENV,
+  MIN_REFRESH_TO_ACCESS_RATIO,
   REDIS_URI_ENV,
   ROTATION_GRACE_WINDOW_ENV,
   SERVICE_PERMISSIONS_ENV,
@@ -116,6 +119,12 @@ export {
   revokeSessionTokenBase,
 } from 'utils/sessions/revoke.ts'
 export { refreshSessionTokens, refreshSessionTokensBase } from 'utils/sessions/refresh.ts'
+export { deriveSessionToken, deriveSessionTokenBase } from 'utils/sessions/derive.ts'
+export {
+  mintAccessToken,
+  mintAccessTokenBase,
+  type MintedAccessToken,
+} from 'utils/sessions/mint-access-token.ts'
 export {
   attachRotatedSessionToError,
   recoverRotatedSessionCookie,
@@ -165,6 +174,7 @@ export type {
 } from 'typings/auth.ts'
 export type {
   AppTokenBaseAccess,
+  DerivedSession,
   RateLimitsOptions,
   SessionStatus,
   SessionTokens,

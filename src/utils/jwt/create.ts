@@ -72,6 +72,10 @@ export const createJWT = async (
 
     // Add expiration to payload
     payload.exp = current + exp
+    // Issued-at, alongside `exp` above so both read off the same `current` timestamp — lets a
+    // later verifier compute this token's own age (e.g. `deriveSessionTokenBase`'s freshness
+    // check) without relying on its own clock for anything but "now".
+    payload.iat = payload.iat ?? current
   }
 
   // Header (indicates the algorithm used)

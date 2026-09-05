@@ -10,10 +10,10 @@ import { HttpError } from '@zanix/errors'
 
 import { pageSessionGuard } from 'modules/middlewares/page-session.guard.ts'
 import { recoverRotatedSessionCookie } from 'utils/sessions/rotation-recovery.ts'
-import { generateSessionTokens } from 'utils/sessions/create.ts'
+import { createRefreshToken, generateSessionTokens } from 'utils/sessions/create.ts'
 import { ROTATION_GRACE_WINDOW_ENV } from 'utils/constants.ts'
 
-// `pageSessionGuard` is pure composition of `refreshSessionTokens`/`permissionsPipe`/
+// `pageSessionGuard` is pure composition of `deriveSessionToken`/`permissionsPipe`/
 // `attachRotatedSessionToError` — each already has its own dedicated unit coverage. What's under
 // test HERE is the real interaction between them (the composition itself), so this suite lives in
 // `integration/`, not `unit/`, per `zanix-test-tier-conventions`.
@@ -34,6 +34,23 @@ async function mintRefreshToken(permissions?: string[]) {
     permissions,
   })
   return refreshToken
+}
+
+/**
+ * Mints a refresh token whose `iat` is forged well past the default `accessExpiration` (`'1h'`)
+ * freshness threshold `deriveSessionToken` checks it against — everything else (`exp`, signature)
+ * stays real and valid. Lets a test exercise the "stale, must rotate" path deterministically,
+ * without waiting an hour of real time for a freshly minted token to actually age.
+ */
+async function mintStaleRefreshToken(permissions?: string[]) {
+  const subject = 'operator@example.com'
+  const staleIat = Math.floor(Date.now() / 1000) - 3700
+  return await createRefreshToken({
+    expiration: '1y',
+    subject,
+    type: 'user',
+    payload: { access: { subject, permissions }, iat: staleIat },
+  })
 }
 
 Deno.test('pageSessionGuard: rejects with UNAUTHORIZED when there is no session cookie at all', async () => {
@@ -59,7 +76,7 @@ Deno.test('pageSessionGuard: rejects with UNAUTHORIZED for an invalid/garbage re
   Deno.env.delete('JWT_KEY')
 })
 
-Deno.test('pageSessionGuard: allows a session carrying one of the required roles through, rotating the cookie', async () => {
+Deno.test('pageSessionGuard: allows a session carrying one of the required roles through, reusing a fresh cookie unchanged', async () => {
   Deno.env.set('JWT_KEY', 'my secret')
 
   const refreshToken = await mintRefreshToken(['admin'])
@@ -69,8 +86,27 @@ Deno.test('pageSessionGuard: allows a session carrying one of the required roles
   const result = await guard(ctx)
 
   assertEquals(result, {})
-  // Rotation actually ran: the session now carries a NEW refresh token, distinct from the one
-  // presented — the same single-use rotation `refreshSessionTokens` guarantees on its own.
+  // A just-minted token is well within the default freshness threshold — `deriveSessionToken`
+  // reuses it as-is, no rotation, same cookie the client already had.
+  assertEquals(ctx.locals.session.token, refreshToken)
+  assertEquals(ctx.locals.session.scope, ['admin'])
+
+  Deno.env.delete('JWT_KEY')
+})
+
+Deno.test('pageSessionGuard: rotates the cookie once the session is stale', async () => {
+  Deno.env.set('JWT_KEY', 'my secret')
+
+  const refreshToken = await mintStaleRefreshToken(['admin'])
+  const ctx = createCtx({ 'X-Znx-App-Token': refreshToken })
+
+  const guard = pageSessionGuard(['admin', 'admin:triggers'])
+  const result = await guard(ctx)
+
+  assertEquals(result, {})
+  // Past the freshness threshold: rotation actually ran, the session now carries a NEW refresh
+  // token, distinct from the one presented — the same single-use rotation guarantee, just applied
+  // at a coarser cadence than every single page load.
   assertNotEquals(ctx.locals.session.token, refreshToken)
   assertEquals(ctx.locals.session.scope, ['admin'])
 
@@ -83,7 +119,8 @@ Deno.test(
   async () => {
     Deno.env.set('JWT_KEY', 'my secret')
 
-    const refreshToken = await mintRefreshToken(['viewer'])
+    // Stale on purpose: recovery only has anything to recover when a rotation actually happened.
+    const refreshToken = await mintStaleRefreshToken(['viewer'])
     const ctx = createCtx({ 'X-Znx-App-Token': refreshToken })
 
     const guard = pageSessionGuard(['admin'])
@@ -91,7 +128,7 @@ Deno.test(
     assertEquals(error.status.value, 403)
 
     // The 403 above must not strand the client on the now-blocklisted cookie: the rotated one
-    // `refreshSessionTokens` already minted before the permission check ran must still be
+    // `deriveSessionToken` already minted before the permission check ran must still be
     // recoverable off the thrown error — see `docs/configuration.md`'s "Guard-Stage Rotation
     // Recovery" section for why this matters.
     const response = await recoverRotatedSessionCookie()(error)
@@ -130,7 +167,9 @@ Deno.test('pageSessionGuard: single-use rotation — a consumed refresh token is
   // the near-simultaneous-retry case the grace window is FOR gets its own dedicated coverage below.
   Deno.env.set(ROTATION_GRACE_WINDOW_ENV, '0')
 
-  const refreshToken = await mintRefreshToken(['admin'])
+  // Stale on purpose: a fresh token is reused as-is by `deriveSessionToken` (no rotation, nothing
+  // to blocklist), so a stale one is what's needed to exercise single-use rotation at all here.
+  const refreshToken = await mintStaleRefreshToken(['admin'])
   const blocklisted = new Map<string, boolean>()
   // Backs BOTH the local-cache path and the Redis path (`getCachedOrFetch`/`saveToCaches`) off the
   // SAME underlying map — `checkTokenBlockList`/`addTokenToBlockListBase` branch on whether
@@ -166,7 +205,8 @@ Deno.test('pageSessionGuard: single-use rotation — a consumed refresh token is
 
 /**
  * Covers the rotation grace window through the full `pageSessionGuard` composition, not just
- * `refreshSessionTokensBase` in isolation: a near-simultaneous second request presenting the SAME
+ * `deriveSessionTokenBase`/`refreshSessionTokensBase` in isolation: a near-simultaneous second
+ * request presenting the SAME
  * token must pass the guard (not a 401), AND must leave `ctx.locals.session` correctly populated —
  * `permissionsPipe` reads it right after, unconditionally, with no awareness that this request's
  * pair came from the grace cache rather than a fresh rotation.
@@ -177,7 +217,9 @@ Deno.test(
   async () => {
     Deno.env.set('JWT_KEY', 'my secret')
 
-    const refreshToken = await mintRefreshToken(['admin'])
+    // Stale on purpose: the grace window only matters once a real rotation has actually happened
+    // and blocklisted a token — a fresh token is reused as-is, never touching the blocklist at all.
+    const refreshToken = await mintStaleRefreshToken(['admin'])
     const blocklisted = new Map<string, unknown>()
     // Backs BOTH the local-cache path and the Redis path off the SAME underlying map — see the
     // identical concern noted on the regression test above: another test file running earlier in

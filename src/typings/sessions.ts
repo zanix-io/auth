@@ -171,3 +171,23 @@ export type SessionTokens = {
    */
   refreshToken: string
 }
+
+/**
+ * The result of `deriveSessionTokenBase` (`utils/sessions/derive.ts`) — a cheaper alternative to
+ * {@link SessionTokens} for a caller that only needs a request's session claims derived from an
+ * already-issued refresh token, never a freshly signed access token string.
+ */
+export type DerivedSession = {
+  /**
+   * The refresh token now backing this session — the same one presented, reused as-is, when
+   * `rotated` is `false`; a freshly minted replacement when `rotated` is `true`.
+   */
+  refreshToken: string
+  /** Whether this call minted a new refresh token (and blocklisted the old one), or reused the
+   * presented one unchanged. */
+  rotated: boolean
+  /** The refresh token presented to this call, before any rotation. */
+  oldToken: string
+  /** The presented refresh token's own decoded payload (before rotation). */
+  payload: JWTPayload
+}

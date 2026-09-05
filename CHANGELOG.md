@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-05
+
+### Added
+
+- **Configurable session token lifetimes.** `AuthSessionOptions.accessExpiration`/
+  `refreshExpiration` let a caller override the previously hardcoded `'1h'`/`'1y'` access/refresh
+  token lifetimes on `generateSessionTokens()`. Whatever is chosen travels forward automatically
+  into every later rotation/derivation for that session, since it's embedded in the refresh token's
+  own payload. `refreshExpiration` must be at least `MIN_REFRESH_TO_ACCESS_RATIO` (`3`) times
+  `accessExpiration` — enforced with `InternalError('AUTH_SESSION_INVALID_EXPIRATION')` — so a
+  session can't end up with a rotation cadence dangerously close to the refresh token's own absolute
+  expiry.
+- **`deriveSessionToken()`/`deriveSessionTokenBase()`** — a cheaper counterpart to
+  `refreshSessionTokens()` for a caller (`pageSessionGuard`, now built on this) that only needs a
+  request's session claims, never a real signed access token. Rotates the presented refresh token
+  only once it's older than its own `accessExpiration` — every JWT this package issues now carries
+  an `iat` claim, which is what this freshness check reads — instead of on every single call, with
+  an `options.rotateRefresh` override for a caller that needs to force the decision either way.
+- **`mintAccessToken()`/`mintAccessTokenBase()`** — mints a real, signed access token from an
+  already-verified refresh token without ever rotating, blocklisting, or replacing that refresh
+  token. For a caller (e.g. an SSR-side relay to an external Zanix service) that needs a
+  `Bearer`-ready credential but has no business managing the session's own rotation lifecycle — that
+  stays exclusively whatever already gates the surrounding page/route.
+
+### Changed
+
+- **`pageSessionGuard` no longer rotates the refresh-token cookie on every protected page load.** It
+  now runs on `deriveSessionToken()` instead of `refreshSessionTokens()` directly — a presented
+  refresh token younger than its own `accessExpiration` is reused as-is (no mint, no blocklist
+  write, no new cookie); only a token at least that old triggers a real rotation, with the same
+  single-use blocklisting and rotation-grace window as before. In practice, an actively browsed
+  session now rotates roughly once per `accessExpiration` window instead of once per page load.
+
 ## [1.1.2] - 2026-09-03
 
 ### Fixed

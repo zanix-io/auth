@@ -1,5 +1,6 @@
 import type { ScopedContext } from '@zanix/server'
 import type { AuthSessionOptions } from 'typings/auth.ts'
+import type { JWTPayload } from 'typings/jwt.ts'
 import type {
   AccessTokenOptions,
   AppTokenOptions,
@@ -14,7 +15,14 @@ import { defineLocalSession } from './context.ts'
 import { createJWT } from 'utils/jwt/create.ts'
 import { decodeJWT } from 'utils/jwt/decode.ts'
 import { parseTTL } from '@zanix/helpers'
-import { JWK_PRI_ENV, JWT_KEY_ENV } from 'utils/constants.ts'
+import {
+  DEFAULT_ACCESS_EXPIRATION,
+  DEFAULT_AUTH_ISSUER,
+  DEFAULT_REFRESH_EXPIRATION,
+  JWK_PRI_ENV,
+  JWT_KEY_ENV,
+  MIN_REFRESH_TO_ACCESS_RATIO,
+} from 'utils/constants.ts'
 
 /** Get JWT secret */
 const getCurrentSecret = (
@@ -40,6 +48,48 @@ const getCurrentSecret = (
       },
     },
   )
+}
+
+/**
+ * Resolves the final claims `createAppToken` signs from its raw `subject`/`payload` inputs —
+ * `aud` from `payload.permissions` (falling back to an already-set `payload.aud`), `rateLimit`
+ * defaulted to `100`, and `sub` from `subject`. Extracted so `deriveSessionTokenBase`
+ * (`utils/sessions/derive.ts`) can build the exact same claims shape a real access token would
+ * carry — for populating a local session — without signing anything, keeping the two derivations
+ * from silently drifting apart.
+ *
+ * @param payload - The raw payload passed to {@link createAppToken}.
+ * @param subject - The token subject.
+ * @returns The resolved claims, ready to sign (or, for a claims-only caller, to use as-is).
+ */
+function resolveAppTokenClaims(
+  payload: AppTokenOptions<SessionTypes>['payload'],
+  subject: string,
+): Partial<JWTPayload> {
+  const aud = payload?.permissions || payload?.aud
+  const rateLimit = payload?.rateLimit || 100
+  const rest = { ...payload }
+  delete rest.permissions
+
+  return { ...rest, aud, rateLimit, sub: subject }
+}
+
+/**
+ * Builds the `payload` a user access token mints from an `AuthSessionOptions` — the `jit`/
+ * `permissions`/`rateLimit` merge every access-token-for-a-session call applies before either
+ * signing one ({@link generateSessionTokens}, `mintAccessTokenBase` in
+ * `utils/sessions/mint-access-token.ts`) or building the equivalent claims without signing
+ * ({@link buildAccessTokenClaims}). Extracted so these three call sites share one definition
+ * instead of maintaining three copies that can silently drift apart on which fields carry over.
+ *
+ * @param options - The `AuthSessionOptions` to derive an access token's payload from.
+ * @returns The `payload` to pass into {@link createAccessToken}/{@link resolveAppTokenClaims}.
+ */
+export function toAccessTokenPayload(
+  options: AuthSessionOptions,
+): AppTokenOptions<'user'>['payload'] {
+  const { id, rateLimit, permissions, payload } = options
+  return { ...payload, jit: id || payload?.jit, permissions, rateLimit }
 }
 
 /**
@@ -104,13 +154,8 @@ export const createAppToken = async <T extends SessionTypes>(
   const { value: secret, version } = getCurrentSecret(type)
 
   try {
-    const aud = payload?.permissions || payload?.aud
-    const rateLimit = payload?.rateLimit || 100
-
-    delete payload?.permissions
-
     const token = await createJWT(
-      { ...payload, aud, rateLimit, sub: subject },
+      resolveAppTokenClaims(payload, subject),
       isRSA ? atob(secret) : secret,
       {
         keyID: version,
@@ -219,11 +264,22 @@ export const createRefreshToken = <T extends SessionTypes>(
  *   - `subject`: The identifier (e.g., user email or ID) for which the tokens are generated.
  *   - `rateLimit`: Optional custom configuration for the token rate limit. Defaults to `100`
  *   - `permissions`: Optional custom configuration for the token aud.
+ *   - `accessExpiration`: Optional access token lifetime. Defaults to `'1h'`.
+ *   - `refreshExpiration`: Optional refresh token lifetime. Defaults to `'1y'`. Must be at least
+ *     `MIN_REFRESH_TO_ACCESS_RATIO` times `accessExpiration`.
+ *
+ * `options` (including `accessExpiration`/`refreshExpiration`) is embedded whole into the refresh
+ * token's own payload (`payload.access`, below) — so a session's chosen expiration policy carries
+ * forward automatically into every later `deriveSessionTokenBase`/`refreshSessionTokensBase` call
+ * for that same session, without a caller having to re-specify it on each rotation.
  *
  * @returns {Promise<{ accessToken: string; refreshToken: string;}>}
  * A promise resolving to an object containing:
  *   - `accessToken`: The generated access token.
  *   - `refreshToken`: The generated refresh token.
+ *
+ * @throws {InternalError} If `refreshExpiration` isn't at least `MIN_REFRESH_TO_ACCESS_RATIO`
+ * times `accessExpiration` — a configuration mistake, not something a request could trigger.
  *
  * @example
  * ```ts
@@ -239,17 +295,39 @@ export const generateSessionTokens = async (
   ctx: ScopedContext,
   options: AuthSessionOptions,
 ): Promise<SessionTokens> => {
-  const { subject, id, rateLimit, permissions, payload } = options
+  const {
+    subject,
+    accessExpiration = DEFAULT_ACCESS_EXPIRATION,
+    refreshExpiration = DEFAULT_REFRESH_EXPIRATION,
+  } = options
+
+  const accessExp = parseTTL(accessExpiration)
+  const refreshExp = parseTTL(refreshExpiration)
+
+  if (refreshExp < accessExp * MIN_REFRESH_TO_ACCESS_RATIO) {
+    throw new InternalError(
+      `refreshExpiration must be at least ${MIN_REFRESH_TO_ACCESS_RATIO} times accessExpiration`,
+      {
+        code: 'AUTH_SESSION_INVALID_EXPIRATION',
+        meta: {
+          source: 'zanix',
+          accessExpiration: accessExp,
+          refreshExpiration: refreshExp,
+          minRatio: MIN_REFRESH_TO_ACCESS_RATIO,
+        },
+      },
+    )
+  }
 
   const sessionAccessToken = await createAccessToken(ctx, {
-    expiration: '1h',
+    expiration: accessExpiration,
     subject,
     type: 'user',
-    payload: { ...payload, jit: id || payload?.jit, permissions, rateLimit },
+    payload: toAccessTokenPayload(options),
   })
 
   const sessionRefreshToken = await createRefreshToken({
-    expiration: '1y',
+    expiration: refreshExpiration,
     subject,
     type: 'user',
     payload: { access: options },
@@ -261,6 +339,33 @@ export const generateSessionTokens = async (
     accessToken: sessionAccessToken,
     refreshToken: sessionRefreshToken,
   }
+}
+
+/**
+ * Builds the exact claims shape a real user access token would carry for `options` — same `aud`/
+ * `rateLimit`/`jit` derivation {@link generateSessionTokens} applies before signing one — without
+ * signing anything. For `deriveSessionTokenBase` (`utils/sessions/derive.ts`), which only needs a
+ * {@link defineLocalSession}-ready payload to populate a request's local session from an
+ * already-verified refresh token's own embedded `payload.access`, never a real JWT string.
+ *
+ * @param options - The `AuthSessionOptions` embedded in an already-verified refresh token
+ * (`payload.access`), optionally merged with a caller's own overrides.
+ * @returns Claims shaped exactly like a freshly decoded access token's payload, including a fresh
+ * `jti` and an `exp` computed from `options.accessExpiration` (default `'1h'`) — so a consumer of
+ * `ctx.locals.session.payload` sees the same shape regardless of whether a real access token was
+ * ever minted for this request.
+ */
+export function buildAccessTokenClaims(options: AuthSessionOptions): JWTPayload {
+  const { subject, accessExpiration = DEFAULT_ACCESS_EXPIRATION } = options
+
+  const claims = resolveAppTokenClaims(toAccessTokenPayload(options), subject)
+
+  return {
+    ...claims,
+    jti: crypto.randomUUID(),
+    iss: claims.iss ?? DEFAULT_AUTH_ISSUER,
+    exp: Math.floor(Date.now() / 1000) + parseTTL(accessExpiration),
+  } as JWTPayload
 }
 
 /**

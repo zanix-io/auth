@@ -46,6 +46,9 @@ export type JWTHeader = {
  *                                      It can be a string or an array of strings.
  * @property {number} [exp] - The expiration time of the token, in seconds since the Unix epoch (optional).
  *                            After this time, the token will no longer be valid.
+ * @property {number} [iat] - Issued-at time, in seconds since the Unix epoch. Set automatically
+ *                            by {@link createJWT} whenever an expiration is given, from the same
+ *                            timestamp `exp` is computed against.
  * @property {boolean} [secureData] - Optional property to store secure data.
  *                                    This data is automatically encrypted when generated.
  *                                    During verification, it is automatically decrypted.
@@ -65,6 +68,8 @@ export type JWTPayload = {
   aud?: string | string[] | undefined
   /** Expiration time in Unix timestamp. */
   exp?: number | undefined
+  /** Issued-at time in Unix timestamp. */
+  iat?: number | undefined
   /** The secure data (automatically encrypted when generated)*/
   secureData?: string
 }

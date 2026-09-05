@@ -86,7 +86,13 @@ It provides a **unified and extensible system** for:
 
 - **Session Management**
   - `generateSessionTokens()`, `createAccessToken()`, `createRefreshToken()`: generate different
-    session token types.
+    session token types. `AuthSessionOptions.accessExpiration`/`refreshExpiration` let a caller
+    override the default `'1h'`/`'1y'` lifetimes — see
+    [Session Token Expiration & Refresh Cadence](./docs/configuration.md#-session-token-expiration--refresh-cadence).
+  - `deriveSessionToken()`, `deriveSessionTokenBase()`: the cheaper counterpart to
+    `refreshSessionTokens()` for a caller that only needs a request's session claims, never a real
+    signed access token — rotates the refresh token only once it's old enough to warrant it, instead
+    of on every call. What `pageSessionGuard` actually uses.
   - `revokeAppTokens()`, `revokeSessionToken()`: revoke tokens or a full session.
   - `getSessionHeaders()`, `getDefaultSessionHeaders()`: add standardized session headers to
     responses (see [Session Response Headers](./docs/configuration.md#-session-response-headers)).
@@ -95,8 +101,8 @@ It provides a **unified and extensible system** for:
   - Also available bound to the default provider: `this.providers.get('auth').session` —
     `.generateTokens()`, `.refreshTokens()`, `.revokeToken()`.
   - `attachRotatedSessionToError()`, `recoverRotatedSessionCookie()`: recover a refresh-token cookie
-    a guard's own `refreshSessionTokens()` call already rotated, for a request where a later
-    guard/pipe in the same chain throws — see
+    a guard's own `refreshSessionTokens()`/`deriveSessionToken()` call already rotated, for a
+    request where a later guard/pipe in the same chain throws — see
     [Guard-Stage Rotation Recovery](./docs/configuration.md#-guard-stage-rotation-recovery).
 
 - **Service-Credential Exchange (Machine-to-Machine)**
@@ -144,8 +150,10 @@ It provides a **unified and extensible system** for:
     [Captcha (Anti-bot Verification)](./docs/configuration.md#-captcha-anti-bot-verification).
   - `pageSessionGuard`: gates a `@zanix/space` page behind an active human session and at least one
     required role, re-deriving the session from the `HttpOnly` refresh-token cookie on every
-    protected page load. See
-    [Guard-Stage Rotation Recovery](./docs/configuration.md#-guard-stage-rotation-recovery).
+    protected page load — rotating that cookie only once it's old enough to warrant it, not on every
+    single load. See
+    [Session Token Expiration & Refresh Cadence](./docs/configuration.md#-session-token-expiration--refresh-cadence)
+    and [Guard-Stage Rotation Recovery](./docs/configuration.md#-guard-stage-rotation-recovery).
   - `oauthStateIssueGuard`/`oauthStateVerifyGuard`: protects an OAuth2 login flow's authorization
     redirect and its callback against CSRF, via the `state` round trip the OAuth2 code-flow spec
     itself defines. See

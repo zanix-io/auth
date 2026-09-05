@@ -114,3 +114,36 @@ export const REDIS_URI_ENV = 'REDIS_URI'
  * legitimate token as the one that won.
  */
 export const ROTATION_GRACE_WINDOW_ENV = 'ROTATION_GRACE_WINDOW'
+
+/**
+ * Default `accessExpiration` (`AuthSessionOptions`) whenever a caller doesn't provide one —
+ * shared by every place that needs this default: `generateSessionTokens`, `buildAccessTokenClaims`,
+ * `deriveSessionTokenBase`, and `mintAccessTokenBase`. Centralized so those can't silently drift
+ * apart on what "the default" actually is.
+ */
+export const DEFAULT_ACCESS_EXPIRATION = '1h'
+
+/**
+ * Default `refreshExpiration` (`AuthSessionOptions`) whenever a caller doesn't provide one — see
+ * {@link DEFAULT_ACCESS_EXPIRATION}'s own doc for why this lives here instead of as a repeated
+ * literal at each call site.
+ */
+export const DEFAULT_REFRESH_EXPIRATION = '1y'
+
+/**
+ * Minimum multiple `refreshExpiration` must be over `accessExpiration` (`AuthSessionOptions`,
+ * enforced by `generateSessionTokens`). Exists to leave real margin between the refresh token's
+ * own absolute lifetime and the cadence `deriveSessionTokenBase` (`utils/sessions/derive.ts`)
+ * rotates it at — which is itself driven by `accessExpiration`, the "how old is too old" freshness
+ * threshold a presented refresh token gets checked against before deciding whether to reuse it or
+ * mint a replacement.
+ *
+ * Without this margin, a session that goes quiet right around the moment it crosses that freshness
+ * threshold can have its refresh token expire for real — a `verifyJWT` rejection, which runs
+ * BEFORE any rotation decision ever gets a chance to run — instead of rotating cleanly on its next
+ * use. A margin of `MIN_REFRESH_TO_ACCESS_RATIO` guarantees at least one full `accessExpiration`
+ * window of slack past the freshness threshold before that can happen, so a session that returns
+ * at any point before its refresh token's own absolute expiry always gets a clean rotation instead
+ * of a forced re-login.
+ */
+export const MIN_REFRESH_TO_ACCESS_RATIO = 3

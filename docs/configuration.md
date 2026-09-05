@@ -9,8 +9,9 @@ headers/cookies `@zanix/auth` manages for you.
 2. [Rate Limiting](#-rate-limiting)
 3. [Captcha (Anti-bot Verification)](#-captcha-anti-bot-verification)
 4. [Key Rotation](#-key-rotation)
-5. [Session Response Headers](#-session-response-headers)
-6. [Guard-Stage Rotation Recovery](#-guard-stage-rotation-recovery)
+5. [Session Token Expiration & Refresh Cadence](#-session-token-expiration--refresh-cadence)
+6. [Session Response Headers](#-session-response-headers)
+7. [Guard-Stage Rotation Recovery](#-guard-stage-rotation-recovery)
 
 ---
 
@@ -160,6 +161,49 @@ rotation is disabled.
 
 ---
 
+## ⏱️ Session Token Expiration & Refresh Cadence
+
+`generateSessionTokens()` accepts optional `accessExpiration`/`refreshExpiration` fields on
+`AuthSessionOptions` (defaulting to `'1h'`/`'1y'`, same as before these existed) — a caller no
+longer has to accept the built-in literals for a session's own token lifetimes. Whatever is chosen
+at login travels forward automatically into every later refresh/rotation, since the whole
+`AuthSessionOptions` object (including these two fields) is embedded in the refresh token's own
+payload.
+
+`refreshExpiration` must be at least `MIN_REFRESH_TO_ACCESS_RATIO` (`3`) times `accessExpiration` —
+`generateSessionTokens()` throws `InternalError('AUTH_SESSION_INVALID_EXPIRATION')` otherwise. This
+margin exists so a session that goes quiet right around the moment its rotation cadence (below)
+kicks in still has real room left on the refresh token's own absolute lifetime: without it, the
+refresh token could expire for real (a `verifyJWT` rejection, which runs BEFORE any rotation
+decision ever gets a chance to run) before a legitimate, still-active session gets a chance to renew
+it — forcing a real re-login instead of a seamless rotation. `refreshExpiration`'s own type
+(`'1w'`/`'1mo'`/`'6mo'`/`'1y'`) already clears this margin against any allowed `accessExpiration`
+(capped at `'1h'` by `createAccessToken`), so a type-honest TypeScript caller can't actually trigger
+this — the runtime check mainly guards a caller bypassing the type, or one calling these functions
+from plain JavaScript.
+
+### `pageSessionGuard`'s rotation cadence: not every page load
+
+`pageSessionGuard` derives a request's session via `deriveSessionToken`, not `refreshSessionTokens`
+— a cheaper mechanism built specifically for this call site, since a `@zanix/space` page never needs
+a real signed access token, only the claims it would carry (see this package's own
+`deriveSessionTokenBase` JSDoc for the full mechanism). A presented refresh token younger than its
+own `accessExpiration` is reused as-is: no new token minted, no blocklist write, no new
+`Set-Cookie`. A token at least that old gets a full rotation instead, delegated whole to
+`refreshSessionTokensBase` — the exact same single-use blocklisting and rotation-grace window
+described below, just triggered roughly once per `accessExpiration` window per active session
+instead of on every single page load.
+
+`deriveSessionToken`/`deriveSessionTokenBase` accept the same `rotateRefresh?: boolean` override for
+a call site that needs to force one decision or the other regardless of the automatic freshness
+check — `true` forces a rotation even for a fresh token (e.g. right before a sensitive action, to
+invalidate any other copy of the current refresh token in circulation); `false` forces reuse even
+for a stale one. Forcing `false` on the only call site that ever presents a given refresh token
+means that token's absolute lifetime is never renewed by this call — it lapses at its own `exp` if
+nothing else ever rotates it, a deliberate consequence of opting out, not a bug.
+
+---
+
 ## 📨 Session Response Headers
 
 When a valid session is present, the following headers may be added to the response:
@@ -276,8 +320,12 @@ export function requireSession(roles: string[]): MiddlewareGuard {
 }
 ```
 
-`pageSessionGuard(roles)` is this exact composition, ready-made — reach for it directly instead of
-hand-rolling the guard above unless you need a genuinely different combination of primitives:
+`pageSessionGuard(roles)` is this same composition, ready-made — built on `deriveSessionToken`
+rather than `refreshSessionTokens` directly (see
+[Session Token Expiration & Refresh Cadence](#-session-token-expiration--refresh-cadence) for why),
+but subject to the identical guard-stage recovery gap above whenever it actually rotates. Reach for
+it directly instead of hand-rolling the guard above unless you need a genuinely different
+combination of primitives:
 
 ```ts
 import { pageSessionGuard } from 'jsr:@zanix/auth'
