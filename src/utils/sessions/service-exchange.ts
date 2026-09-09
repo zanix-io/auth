@@ -59,8 +59,7 @@ import { createAppToken } from './create.ts'
  * behavior: the bare `JWK_PUB_<serviceId>`/`JWK_PRI_<serviceId>` form) when that's unset too. Set
  * `JWK_ID_<serviceId>` (or pass `keyId` explicitly) once you're rotating that service's keypair and
  * need to select a specific `JWK_PUB_<serviceId>_<keyId>`/`JWK_PRI_<serviceId>_<keyId>` pair — same
- * reasoning as `privateKey` above: one naming convention every consumer gets for free, instead of
- * each inventing its own "which key" env var (e.g. a `TEMPLATES_SERVICE_AUTH_KEY_ID`).
+ * reasoning as `privateKey` above.
  * @param options.expiration - How long the assertion itself stays valid — short by design, since
  * it's presented once and immediately exchanged. Defaults to {@link SERVICE_ASSERTION_DEFAULT_EXP}.
  *

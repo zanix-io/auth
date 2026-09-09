@@ -36,9 +36,6 @@ import {
  * - `type: "user"` → **HS256**
  * - `type: "api"`  → **RS256**
  *
- * This distinction ensure that **HMAC** is used for user-based authentication and **RSA** for API authentication,
- * providing appropriate security measures based on the request type.
- *
  * `type` also accepts an array (e.g. `['user', 'api']`) to accept either shape on the same route —
  * the first configured type whose own header carries a Bearer token is the one the request is
  * validated against; if none of them do, the request is rejected the same way a single `type`

@@ -70,18 +70,14 @@ import { permissionsPipe } from './permissions.pipe.ts'
  *   the user ever visits rotates it. Fits a high-traffic, low-sensitivity page that would rather
  *   never pay a rotation's mint + blocklist-write cost on its own path.
  * - **`rotateRefresh: true`** forces a real rotation on EVERY load of this page, even for a token
- *   that's still fresh. For "force a fresh token before a sensitive action" in the common case —
- *   where the sensitive action is a distinct moment separate from any page load, e.g. a REST
- *   handler a page's own form submits to — a DIRECT, one-off {@link deriveSessionToken}/
- *   {@link mintAccessToken} call made at that exact moment stays the better fit; tagging a whole
- *   recurring page guard as "always rotate" for that case only reintroduces the identical
- *   every-load mint + blocklist-write cost the automatic freshness check exists to avoid, for any
- *   user who happens to reload or revisit the page, with no real security benefit over letting the
- *   freshness check decide. This override earns its place on a page whose OWN loader IS the
- *   sensitive operation on every single load, with no separate action moment to hook a one-off call
- *   into instead — a loader that forwards the session against a downstream credential exchange
- *   enforcing its own single-use rotation is the concrete case: every visit needs the freshest
- *   token this guard can hand it, not just the one from the last rotation window.
+ *   that's still fresh. Earns its place only on a page whose OWN loader IS the sensitive operation
+ *   on every single load, with no separate action moment to hook a one-off call into instead — a
+ *   loader that forwards the session against a downstream credential exchange enforcing its own
+ *   single-use rotation is the concrete case: every visit needs the freshest token this guard can
+ *   hand it. For the common case — a sensitive action that's a distinct moment separate from any
+ *   page load, e.g. a REST handler a page's own form submits to — a DIRECT, one-off
+ *   {@link deriveSessionToken}/{@link mintAccessToken} call made at that exact moment is the
+ *   better fit.
  *
  * **The host app must have a `'cache'` core-provider slot registered** (`ctx.providers.get('cache')`
  * below) before this guard runs — any provider works; this guard is agnostic to which one. Without
@@ -129,10 +125,8 @@ import { permissionsPipe } from './permissions.pipe.ts'
  * LEAST ONE of these, never all of them.
  * @param options - Options for the guard.
  * @param {boolean} [options.rotateRefresh] - Forces the rotation decision for this specific page
- * instead of the automatic freshness check — see the "Rotation cadence" section above for when
- * each direction actually earns its place: `false` for a page that should never pay a rotation's
- * cost, `true` only for a page whose own load is the sensitive operation with no separate action
- * moment to rotate at instead. Omitted (the default), the automatic freshness check decides.
+ * instead of the automatic freshness check — see the "Rotation cadence" section above. Omitted
+ * (the default), the automatic freshness check decides.
  */
 export function pageSessionGuard(
   roles: string[],
