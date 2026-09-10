@@ -129,6 +129,7 @@ export {
   attachRotatedSessionToError,
   recoverRotatedSessionCookie,
 } from 'utils/sessions/rotation-recovery.ts'
+export { redirectUnauthenticatedPageVisit } from 'utils/sessions/unauthenticated-redirect.ts'
 export {
   applySessionTokens,
   createAccessToken,

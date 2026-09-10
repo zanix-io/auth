@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-09-10
+
+### Added
+
+- **`redirectUnauthenticatedPageVisit()`** — an `OnErrorHandler`-shaped recovery function,
+  composable via `@zanix/space`'s `globalErrorHandler` alongside `recoverRotatedSessionCookie()`/
+  `createNotFoundHandler()`, that turns an unauthenticated visit to a `pageSessionGuard`-protected
+  (or any `deriveSessionToken`/`refreshSessionTokens`-based custom guard's) page into a real
+  redirect instead of a raw JSON `401`. A guard throw happens before `@zanix/space`'s own
+  `error.tsx`/ `DefaultErrorView` machinery ever runs (that only wraps a `loader`/render-phase
+  throw), so with no handler recognizing it at `server.ssr.onError`, it previously fell straight
+  through to `@zanix/server`'s generic JSON `httpErrorResponse` — the same raw body a REST API route
+  returns, on what a browser navigation expects to be a full HTML page. Declines (returns
+  `undefined`) for anything that isn't a `401`, or that arrives with no `Request` attached
+  (`server.ssr
+  .attachRequestToErrors: true` required) — composes safely alongside other
+  `OnErrorHandler`s regardless of order, same as `recoverRotatedSessionCookie()`.
+
 ## [1.2.1] - 2026-09-05
 
 ### Added
