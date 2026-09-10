@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-09-10
+
+### Fixed
+
+- **`recoverRotatedSessionCookie()` delivered its recovered refresh-token cookie with `Max-Age=0`,
+  deleting it immediately instead of restoring it.** It called `getSessionHeaders(...)` without
+  `expiration`, which defaults to `0` — a value that function's own contract treats as a deliberate
+  "clear every cookie" signal, overriding a real, still-valid `refreshToken` given alongside it. The
+  rotated session marker `attachRotatedSessionToError` attaches now also carries the rotated access
+  token's own `exp` claim, passed through as `expiration`, so the whole cookie batch (refresh token
+  included) gets its own real `Max-Age` again, matching a normal successful response.
+
 ## [1.3.0] - 2026-09-10
 
 ### Added

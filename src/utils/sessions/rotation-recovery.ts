@@ -13,12 +13,16 @@ const ROTATED_SESSION_PROPERTY = 'zanixRotatedSession'
 
 /** What {@link attachRotatedSessionToError} carries on an error, and {@link
  * recoverRotatedSessionCookie} reads back — the exact subset of `ctx.locals.session`
- * {@link getSessionHeaders} needs to rebuild the refresh-token cookie. */
+ * {@link getSessionHeaders} needs to rebuild the refresh-token cookie. `expiration` is the rotated
+ * ACCESS token's own `exp` claim (`session.payload?.exp` — the same field `sessionHeadersInterceptor`
+ * itself reads for a normal successful response) — see {@link recoverRotatedSessionCookie}'s own doc
+ * for why omitting it is a real, previously-shipped bug, not a harmless simplification. */
 type RotatedSessionMarker = {
   token: string
   type: SessionTypes
   subject: string
   status?: SessionStatus
+  expiration?: number
 }
 
 /**
@@ -85,6 +89,7 @@ export function attachRotatedSessionToError<E>(error: E, ctx: ScopedContext): E 
       type: type as SessionTypes,
       subject: session.subject ?? session.id,
       status: session.status,
+      expiration: session.payload?.exp,
     }
     Object.defineProperty(error, ROTATED_SESSION_PROPERTY, {
       value: marker,
@@ -127,13 +132,15 @@ function getRotatedSessionFromError(error: unknown): RotatedSessionMarker | unde
  * have found one to rotate otherwise), so `cookiesAccepted` is unconditionally `true`.
  *
  * The session-status/subject/cookie-consent cookies this call ALSO sets (alongside the refresh
- * token) carry `Max-Age=0` here — this recovery path has no fresh access-token expiration to derive
- * their real lifetime from, unlike a normal successful response. Harmless: the very next
- * successful, guard-passing request re-sets all three correctly through the normal
- * `sessionHeadersInterceptor` path; only the refresh-token cookie's own `Max-Age` (derived
- * independently from the token's own `exp`) matters for the client's session to keep working, and
- * that one is always correct here.
+ * token) track the SAME long, refresh-token-derived `Max-Age` a normal successful response gives
+ * them — `expiration` is the rotated access token's own real `exp` claim ({@link
+ * attachRotatedSessionToError}'s own marker carries it), passed through so `getSessionHeaders`
+ * never falls back to its own `expiration: 0` default, which forces `Max-Age=0` on the ENTIRE
+ * cookie batch (including the refresh-token cookie itself) regardless of a real, still-valid
+ * `refreshToken` being given — `getSessionHeaders`'s own doc documents `expiration: 0` as a
+ * deliberate "clear everything" signal, exactly the opposite of what a recovery response needs.
  *
+
  * @example
  * ```ts
  * import { globalErrorHandler, createNotFoundHandler } from '@zanix/space'
@@ -162,6 +169,7 @@ export function recoverRotatedSessionCookie(): (
       type: rotated.type,
       subject: rotated.subject,
       sessionStatus: rotated.status,
+      expiration: rotated.expiration,
     })
     addHeadersToResponse(response, headers)
     return response

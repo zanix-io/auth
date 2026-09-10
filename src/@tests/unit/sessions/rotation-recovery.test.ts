@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import { assert, assertEquals, assertStringIncludes } from '@std/assert'
+import { assert, assertEquals, assertFalse, assertStringIncludes } from '@std/assert'
 import {
   attachRotatedSessionToError,
   recoverRotatedSessionCookie,
@@ -30,6 +30,34 @@ Deno.test('attachRotatedSessionToError: recoverRotatedSessionCookie() rebuilds t
 
   Deno.env.delete('JWT_KEY')
 })
+
+Deno.test(
+  'attachRotatedSessionToError: recoverRotatedSessionCookie() delivers the recovered refresh-token ' +
+    'cookie with its own real Max-Age, never Max-Age=0 — a real, previously-shipped bug: omitting ' +
+    "getSessionHeaders' expiration defaulted it to 0, which forces Max-Age=0 on the whole cookie " +
+    'batch regardless of a real, still-valid refreshToken, so the browser deleted the very cookie ' +
+    'this recovery path exists to deliver',
+  async () => {
+    Deno.env.set('JWT_KEY', 'my secret')
+
+    const ctx = createCtx()
+    await generateSessionTokens(ctx, { subject: 'operator@example.com' })
+
+    const error = attachRotatedSessionToError(new Error('boom'), ctx)
+    const response = await recoverRotatedSessionCookie()(error)
+
+    assert(response instanceof Response, 'expected a real Response, not undefined')
+    const setCookies = response.headers.getSetCookie()
+    const appToken = setCookies.find((c) => c.startsWith('X-Znx-App-Token='))
+    assert(appToken)
+    assertFalse(
+      /Max-Age=0;/.test(appToken),
+      `the recovered cookie must carry its own real, long Max-Age, not 0: ${appToken}`,
+    )
+
+    Deno.env.delete('JWT_KEY')
+  },
+)
 
 Deno.test('attachRotatedSessionToError: a no-op on an error thrown before any rotation ever happened', async () => {
   const ctx = createCtx() // never rotated — locals.session stays undefined
