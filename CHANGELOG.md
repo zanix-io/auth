@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-09-10
+
+### Added
+
+- **`markCookiesAccepted(ctx)`** — injects `X-Znx-Cookies-Accepted: true` as a REQUEST header (via a
+  documented `ctx.req` clone, not a direct mutation — `ctx.req.headers`/`ctx.cookies` are both
+  immutable/frozen on a real request), so `checkAcceptedCookies` (read by
+  `sessionHeadersInterceptor`) sees consent as already given on THIS SAME request, not just the next
+  one. Extracted from `zanix/iam`'s own `cookieConsentBypassGuard`, which independently hand-rolled
+  the identical fix — `@presenza/web`'s own `cookiesAcceptedGuard` needed the exact same mechanism
+  shortly after, confirming this is a generic gap every `@zanix/auth` consumer with no real
+  cookie-consent banner of its own runs into, not something specific to either app. Both consumers
+  are expected to migrate to this once published; `@presenza/web`'s own migration is ready but not
+  yet merged, pending this release. See that function's own doc for the full mechanism, including a
+  real, previously-live `@zanix/server` bug (`registerGlobalGuard`, fixed in `^4.2.7`) this depends
+  on when called from a GLOBAL guard specifically.
+
 ## [1.3.1] - 2026-09-10
 
 ### Fixed

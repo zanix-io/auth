@@ -130,6 +130,7 @@ export {
   recoverRotatedSessionCookie,
 } from 'utils/sessions/rotation-recovery.ts'
 export { redirectUnauthenticatedPageVisit } from 'utils/sessions/unauthenticated-redirect.ts'
+export { markCookiesAccepted } from 'utils/sessions/mark-cookies-accepted.ts'
 export {
   applySessionTokens,
   createAccessToken,
