@@ -10,7 +10,7 @@ import { jwtValidationGuard } from 'modules/middlewares/jwt-validation.guard.ts'
 import { createJWT } from 'utils/jwt/create.ts'
 import { contextMock } from '../../mocks.ts'
 import { addTokenToBlockList } from 'utils/sessions/block-list.ts'
-import { assert, assertArrayIncludes, assertEquals, assertFalse } from '@std/assert'
+import { assert, assertEquals, assertFalse } from '@std/assert'
 import { isUUID } from '@zanix/validator'
 import { generateRSAKeys } from '@zanix/helpers'
 import { sessionHeadersInterceptor } from 'modules/middlewares/headers.interceptor.ts'
@@ -100,13 +100,23 @@ Deno.test({
 Deno.test({
   sanitizeOps: false,
   sanitizeResources: false,
-  name: 'jwtValidation should fail due rate limit',
+  name: 'jwtValidation should fail due rate limit, without touching an unrelated cookie session',
   fn: async () => {
     const context = await initialize()
 
     const token = await createJWT({}, 'my-secret', { expiration: '1h' })
     context.req.headers.get = (name) => name === 'Authorization' ? `Bearer ${token}` : null
 
+    // `X-Znx-Cookies-Accepted: true` and a real `X-Znx-App-Token` here simulate a caller that
+    // already carries a REAL, unrelated cookie session from a DIFFERENT `@zanix/server` app on the
+    // same host — exactly what an `<img>`/`<script>` tag toward a sibling service ambiently sends,
+    // since `SESSION_COOKIE_ATTRIBUTES` sets no `Domain` (host-only, shared across every port on
+    // that host, see `getSessionHeaders`'s own `emitCookies` doc). This guard authenticates a
+    // `Bearer` HEADER credential, never a cookie — a rejected check here must never emit
+    // `Set-Cookie` at all, real bug this test used to encode as the expected behavior: it used to
+    // assert this exact rejection ALSO cleared `X-Znx-App-Token` (`Max-Age=0`) and overwrote
+    // `X-Znx-User-Session-Status` with `failed` — silently logging out a session this guard never
+    // even looked at.
     context.cookies = {
       [SESSION_HEADERS.user.token]: 'token',
       [GENERAL_HEADERS.cookiesAcceptedHeader]: 'true',
@@ -114,11 +124,8 @@ Deno.test({
     const { response } = await jwtValidationGuard()(context)
     assert(response)
 
-    assertArrayIncludes(response.headers.getSetCookie(), [
-      'X-Znx-User-Session-Status=failed; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict',
-      'X-Znx-Cookies-Accepted=true; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict',
-      'X-Znx-App-Token=undefined; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict',
-    ])
+    assertEquals(response.headers.getSetCookie(), [])
+    assertEquals(response.headers.get('x-znx-user-session-status'), 'failed')
 
     const error = await response.json()
     assertEquals(

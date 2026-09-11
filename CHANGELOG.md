@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-09-11
+
+### Fixed
+
+- **`jwtValidationGuard`'s failure paths (missing/invalid token, blocklisted, rate-limited) wrote a
+  `Set-Cookie` batch that could clobber a completely UNRELATED cookie session belonging to a
+  different `@zanix/server` app on the same host.** This guard authenticates a `Bearer`/
+  `X-Znx-Authorization` HEADER credential — it never reads or owns a cookie-based session, on any
+  `type`. `SESSION_COOKIE_ATTRIBUTES` sets no `Domain`, so every `X-Znx-<type>-Session-Status`/
+  `X-Znx-<type>-Id`/`X-Znx-App-Token` cookie is host-only — shared across every port on that host,
+  never scoped to the issuing app. Any request that ALREADY carried a real, unrelated cookie session
+  from a sibling app (an `<img>`/`<script>`/`<link>` tag pointing at that sibling, or a plain
+  top-level navigation — anything outside `fetch()`'s own restrictive default
+  `credentials:
+  'same-origin'` mode, which is genuinely origin-scoped) ambiently sent that
+  session's own cookies, including `X-Znx-Cookies-Accepted`. `checkAcceptedCookies` trusted that
+  inherited cookie as consent to write a fresh `Set-Cookie` batch for THIS (rejected) check, using
+  the SAME cookie names. With no `refreshToken`/`expiration` ever passed on this path,
+  `accessMaxAge` computed to `0`, which `getSessionHeaders` treats as "clear the token cookie" —
+  deleting the sibling app's real `X-Znx-App-Token` outright and overwriting its status with
+  `failed`. Confirmed live in a real multi-service deployment: a browser page rendering a plain
+  `<img src>` toward an unrelated service's public, unauthenticated-only endpoint (a 401 response
+  the page's own script never even reads) silently logged that page's own, entirely unrelated
+  session out.
+- **`getSessionHeaders`/`getDefaultSessionHeaders` gain a new `emitCookies` option** (default
+  `true`, fully backward compatible for every other caller) — `false` suppresses `Set-Cookie`
+  generation entirely, leaving only the informational headers. `jwtValidationGuard` now passes
+  `emitCookies: false` on every failure path.
+
 ## [1.4.0] - 2026-09-10
 
 ### Added

@@ -61,8 +61,13 @@ import {
  *   capacity-limited resource the way `rateLimitGuard`'s own anonymous bucket does, so there's no
  *   trade-off to expose as a `jwtValidationGuard` option of its own — see `docs/configuration.md`'s
  *   `trustProxyHeader` section for the general contract this follows).
- * - If `X-Znx-Cookies-Accepted: true` is present (in headers or cookies), the same
- *   session status/subject/cookie-consent cookies are sent via `Set-Cookie`.
+ *
+ * These are informational HEADERS only — never `Set-Cookie` (`getDefaultSessionHeaders`'s own
+ * `emitCookies: false` here, unconditionally). This guard authenticates a `Bearer`/
+ * `X-Znx-Authorization` HEADER credential; it never reads or owns a cookie-based session on any
+ * `type`, so a failed check here must never write one — see {@link getSessionHeaders}'s own
+ * `emitCookies` doc for the real, confirmed-live bug this closes (a rejected check here clobbering
+ * an unrelated, real cookie session belonging to a DIFFERENT `@zanix/server` app on the same host).
  *
  * When validation **succeeds**, this guard only assigns `ctx.locals.session` — the
  * corresponding response headers/cookies are added afterwards by
@@ -183,6 +188,21 @@ export const jwtValidationGuard = (
       // successful request — it's purely an informational label on an already-failed response, so
       // there's no shared-fate/DoS trade-off to expose here the way there is for rate limiting.
       trustProxyHeader: false,
+      // Real, confirmed-live bug this closes: this guard validates a `Bearer`/`X-Znx-Authorization`
+      // HEADER credential — it never reads a cookie as ITS OWN session, on ANY `type`. Without this,
+      // every failure branch below (`getDefaultSessionHeaders`, called with no `refreshToken`/
+      // `expiration`) still wrote a `Set-Cookie` batch — under the SAME ecosystem-wide cookie names
+      // (`X-Znx-<type>-Session-Status`/`-Id`/`X-Znx-App-Token`) a real cookie-based session
+      // elsewhere on the SAME HOST already owns (`SESSION_COOKIE_ATTRIBUTES` sets no `Domain`, so
+      // these are host-only, shared across every port on that host, never app-scoped) — clobbering
+      // it with `sessionStatus: 'failed'` and, since no `refreshToken` is ever passed here,
+      // deleting its real `X-Znx-App-Token` outright (`accessMaxAge` computes to `0`, which
+      // `getSessionHeaders` treats as "clear the token cookie"). Confirmed live: a browser page
+      // rendering a plain `<img src>` toward an unrelated service's public, unauthenticated-only
+      // endpoint (a 401 response the page's own script never even reads) silently logged that
+      // page's own, entirely unrelated session out. See {@link getSessionHeaders}'s own
+      // `emitCookies` doc for the full mechanism.
+      emitCookies: false,
     }
     const clientSubject = getClientSubject(ctxHeaders, cookies, type)
 

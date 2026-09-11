@@ -31,6 +31,9 @@ const { cookiesAcceptedHeader } = GENERAL_HEADERS
  *   in which case the clearing `Set-Cookie` entries (`Max-Age=0`) are still sent: a real revoke
  *   clears whatever cookies the client holds regardless of consent, since removing a cookie stores
  *   no new value and tracks nothing.
+ * - If `emitCookies` is `false`, no cookies are added regardless of `cookiesAccepted`/
+ *   `sessionStatus` — see that option's own doc for why a caller reporting on a credential this
+ *   app doesn't itself issue as a cookie needs this override.
  *
  * Defaults:
  * - `sessionStatus` defaults to `"unconfirmed"` if not provided.
@@ -58,6 +61,31 @@ const { cookiesAcceptedHeader } = GENERAL_HEADERS
  *                                          `Max-Age`, and the session status/subject/cookie-consent
  *                                          cookies' `Max-Age` as well, so all of them stay alive exactly
  *                                          as long as the session this refresh token represents does.
+ * @param {boolean} [options.emitCookies=true] - `false` skips `Set-Cookie` generation entirely,
+ *                                          leaving only the informational headers. Real, confirmed-live
+ *                                          bug this closes: a caller with NO cookie-based session of
+ *                                          its own (e.g. `jwtValidationGuard`, which authenticates a
+ *                                          `Bearer`/`X-Znx-Authorization` HEADER credential, never a
+ *                                          cookie) reporting a failed/rejected check still wrote a
+ *                                          `Set-Cookie` batch under these SAME, ecosystem-wide cookie
+ *                                          names (`X-Znx-User-Session-Status`/`X-Znx-User-Id`/
+ *                                          `X-Znx-App-Token`) whenever the request happened to carry an
+ *                                          `X-Znx-Cookies-Accepted` cookie — which it always does when
+ *                                          the CALLER is a browser page that already has a real,
+ *                                          unrelated cookie session with a DIFFERENT `@zanix/server` app
+ *                                          on the same host (`SESSION_COOKIE_ATTRIBUTES` sets no
+ *                                          `Domain`, so these cookies are host-only, not app-scoped —
+ *                                          shared across every port on that host). With no `refreshToken`
+ *                                          and no `expiration` passed (exactly `jwtValidationGuard`'s own
+ *                                          failure-path shape), `accessMaxAge` computes to `0`, which
+ *                                          also clears the real `X-Znx-App-Token` cookie outright —
+ *                                          confirmed live: a browser page rendering a plain `<img src>`
+ *                                          toward an unrelated service's public-but-unauthenticated
+ *                                          endpoint (a 401/404 response, never read by the page's own
+ *                                          script) silently logged the page's own, unrelated session out,
+ *                                          via this exact mechanism. A guard that never reads a cookie as
+ *                                          its OWN credential in the first place has no cookie session to
+ *                                          report on and must never touch one.
  *
  * @returns {Headers} A dictionary of HTTP headers containing
  * session metadata and optionally a `Set-Cookie` header.
@@ -69,6 +97,7 @@ export function getSessionHeaders(options: {
   cookiesAccepted: boolean
   subject: string
   type: SessionTypes
+  emitCookies?: boolean
 }): Headers {
   const {
     cookiesAccepted,
@@ -77,6 +106,7 @@ export function getSessionHeaders(options: {
     type,
     subject,
     expiration = 0,
+    emitCookies = true,
   } = options
   const { sub: subjectHeader, session: statusHeader, token: tokenHeader } = SESSION_HEADERS[type]
 
@@ -94,7 +124,7 @@ export function getSessionHeaders(options: {
   // `<form method="post">` logout can't attach the `X-Znx-Cookies-Accepted` header at all, and its
   // consent cookie may already be gone by the time it navigates — this keeps the clearing cookies
   // reaching the client regardless.
-  if (cookiesAccepted || sessionStatus === 'revoked') {
+  if (emitCookies && (cookiesAccepted || sessionStatus === 'revoked')) {
     const nowInSeconds = Math.floor(Date.now() / 1000) // current Unix timestamp
     const accessMaxAge = Math.max(0, Math.floor(expiration - nowInSeconds))
 
@@ -162,6 +192,8 @@ export function getSessionHeaders(options: {
  *   resolves a real client subject never needs it.
  * @param {string[]} [options.trustedHeaders] - Forwarded to {@link getAnonymousSessionId}, same
  *   fallback path.
+ * @param {boolean} [options.emitCookies=true] - Forwarded to {@link getSessionHeaders} unchanged —
+ *   see that option's own doc.
  * @returns {Promise<Record<string, string>>} A promise that resolves to an object containing the default session headers.
  *
  * @example
@@ -181,6 +213,7 @@ export const getDefaultSessionHeaders = async (
     cookies: HandlerContext['cookies']
     type: SessionTypes
     cookiesAccepted: boolean
+    emitCookies?: boolean
   } & AnonymousSessionOptions,
 ): Promise<Headers> => {
   const {
@@ -191,6 +224,7 @@ export const getDefaultSessionHeaders = async (
     cookies,
     trustProxyHeader,
     trustedHeaders,
+    emitCookies,
   } = options
   const clientSubject = getClientSubject(headers, cookies, type)
   const baseSubject = clientSubject ||
@@ -200,6 +234,7 @@ export const getDefaultSessionHeaders = async (
     type,
     sessionStatus,
     subject: baseSubject,
+    emitCookies,
   })
 }
 

@@ -1,4 +1,4 @@
-import { assert, assertArrayIncludes, assertEquals, assertFalse } from '@std/assert'
+import { assert, assertEquals, assertFalse } from '@std/assert'
 
 import { jwtValidationGuard } from 'modules/middlewares/jwt-validation.guard.ts'
 import { createJWT } from 'utils/jwt/create.ts'
@@ -31,16 +31,16 @@ Deno.test('jwtValidation shoud return an error wihout session', async () => {
   assert(response?.headers.get('x-znx-user-id')?.startsWith('anonymous-'))
   assertFalse(response?.headers.get('set-cookies'))
 
+  // Real, confirmed-live bug this guards against: this guard authenticates a `Bearer` HEADER
+  // credential, never a cookie, on any `type` — even with `X-Znx-Cookies-Accepted: true` present
+  // (which an UNRELATED `@zanix/server` app's own real cookie session ambiently sends too, since
+  // these cookies are host-only and shared across every port on a host — see `getSessionHeaders`'s
+  // own `emitCookies` doc), a rejected check here must never emit `Set-Cookie` — doing so used to
+  // clobber that unrelated session's status and delete its real `X-Znx-App-Token` outright.
   context.req.headers.get = (name) => name === 'X-Znx-Cookies-Accepted' ? 'true' : null
-  // check set cookies
   const { response: withCookies } = await jwtValidationGuard()(context)
 
-  // deno-lint-ignore no-non-null-asserted-optional-chain no-non-null-assertion
-  assertArrayIncludes(withCookies?.headers.getSetCookie()!, [
-    'X-Znx-User-Session-Status=failed; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict',
-    'X-Znx-Cookies-Accepted=true; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict',
-    'X-Znx-App-Token=undefined; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict',
-  ])
+  assertEquals(withCookies?.headers.getSetCookie(), [])
 })
 
 Deno.test('jwtValidation shoud return an error wihout token', async () => {

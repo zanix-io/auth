@@ -49,6 +49,32 @@ Deno.test('getSessionHeaders includes cookies when requested', () => {
 })
 
 /**
+ * Regression coverage for a confirmed, live bug: `jwtValidationGuard`'s own failure paths (a
+ * `Bearer`/`X-Znx-Authorization` HEADER credential check — never a cookie one, on any `type`) used
+ * to call this with `cookiesAccepted: true` (inherited from an UNRELATED cookie session — these
+ * cookies are host-only, shared across every port on a host, see `SESSION_COOKIE_ATTRIBUTES`) and
+ * no override, so a REJECTED check still emitted a `Set-Cookie` batch under the same ecosystem-wide
+ * cookie names a real session elsewhere on the same host already owns — clobbering its status and,
+ * since no `refreshToken` is ever passed on this path, deleting its real `X-Znx-App-Token` outright.
+ * `emitCookies: false` is the fix: cookies stay off regardless of `cookiesAccepted`/`sessionStatus`.
+ */
+Deno.test('getSessionHeaders emits no cookies at all when emitCookies is false', () => {
+  const { 'Set-Cookie': cookies, ...headers } = getSessionHeaders({
+    cookiesAccepted: true,
+    type: 'user',
+    sessionStatus: 'failed',
+    subject: 'alice',
+    expiration: Math.floor(Date.now() / 1000) + 3600,
+    emitCookies: false,
+  })
+
+  assertEquals(cookies, [])
+  // The informational headers are unaffected — only Set-Cookie is suppressed.
+  assertEquals(headers['X-Znx-User-Id'], 'alice')
+  assertEquals(headers['X-Znx-User-Session-Status'], 'failed')
+})
+
+/**
  * Regression coverage for a confirmed vulnerability: every session/subject/cookie-consent/
  * refresh-token cookie used to be built without `Secure`, so a browser would still attach it over
  * a plain-HTTP connection.
