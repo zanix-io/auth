@@ -388,6 +388,14 @@ every other path that sets it. It declines (returns `undefined`) for any error
 > `Object.getOwnPropertyNames`/`Reflect.ownKeys` still list it as a real own key. See the JSDoc on
 > `attachRotatedSessionToError` for the full account.
 
+### The opposite case: a page that must stay reachable with no session at all
+
+`pageSessionGuard` is a hard gate — the right tool for a page that requires a session. A public page
+that renders differently for a visitor who happens to have one, but must still work for one who
+doesn't (a landing page with its own "your dashboard" section, say), needs `optionalSessionGuard`
+instead: same underlying `deriveSessionToken`, but every failure resolves to "anonymous visitor"
+rather than `HttpError('UNAUTHORIZED')`. See its own JSDoc for the full contract.
+
 ---
 
 ## See also

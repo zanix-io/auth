@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-09-12
+
+### Added
+
+- **`optionalSessionGuard`** (`modules/middlewares/optional-session.guard.ts`) — resolves a real
+  session onto `ctx.locals.session` when one exists, but never gates the request on it, unlike
+  `pageSessionGuard`. Pure composition over the same `deriveSessionToken` `pageSessionGuard` already
+  uses (same verification, rotation cadence, single-use blocklist guarantee); the only difference is
+  that every failure (no cookie, invalid/expired/blocklisted token) resolves to "anonymous visitor"
+  instead of `HttpError('UNAUTHORIZED')`. Fits a public page that renders differently for a visitor
+  who happens to have a session, without ever redirecting one who doesn't — generalized from an
+  identical guard a consumer app had to hand-roll for exactly this shape.
+
 ## [1.4.1] - 2026-09-11
 
 ### Fixed
@@ -43,13 +56,13 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
   immutable/frozen on a real request), so `checkAcceptedCookies` (read by
   `sessionHeadersInterceptor`) sees consent as already given on THIS SAME request, not just the next
   one. Extracted from `zanix/iam`'s own `cookieConsentBypassGuard`, which independently hand-rolled
-  the identical fix — `@presenza/web`'s own `cookiesAcceptedGuard` needed the exact same mechanism
-  shortly after, confirming this is a generic gap every `@zanix/auth` consumer with no real
-  cookie-consent banner of its own runs into, not something specific to either app. Both consumers
-  are expected to migrate to this once published; `@presenza/web`'s own migration is ready but not
-  yet merged, pending this release. See that function's own doc for the full mechanism, including a
-  real, previously-live `@zanix/server` bug (`registerGlobalGuard`, fixed in `^4.2.7`) this depends
-  on when called from a GLOBAL guard specifically.
+  the identical fix — a second consumer app's own `cookiesAcceptedGuard` needed the exact same
+  mechanism shortly after, confirming this is a generic gap every `@zanix/auth` consumer with no
+  real cookie-consent banner of its own runs into, not something specific to either app. Both
+  consumers are expected to migrate to this once published; the second consumer's own migration is
+  ready but not yet merged, pending this release. See that function's own doc for the full
+  mechanism, including a real, previously-live `@zanix/server` bug (`registerGlobalGuard`, fixed in
+  `^4.2.7`) this depends on when called from a GLOBAL guard specifically.
 
 ## [1.3.1] - 2026-09-10
 

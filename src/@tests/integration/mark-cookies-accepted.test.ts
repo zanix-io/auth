@@ -5,7 +5,7 @@ import { markCookiesAccepted } from 'utils/sessions/mark-cookies-accepted.ts'
 
 /**
  * Regression coverage for two real, previously-live bugs in the two consumers this function
- * replaces (`zanix/iam`'s own `cookieConsentBypassGuard`, `@presenza/web`'s own
+ * replaces (`zanix/iam`'s own `cookieConsentBypassGuard`, a second consumer app's own
  * `cookiesAcceptedGuard` — both independently hit and fixed the identical shape before this
  * function existed to share the fix once): the first fix attempt wrote
  * `GENERAL_HEADERS.cookiesAcceptedHeader` onto `ctx.req.headers` directly, which passes a unit test

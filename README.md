@@ -154,6 +154,9 @@ It provides a **unified and extensible system** for:
     single load. See
     [Session Token Expiration & Refresh Cadence](./docs/configuration.md#-session-token-expiration--refresh-cadence)
     and [Guard-Stage Rotation Recovery](./docs/configuration.md#-guard-stage-rotation-recovery).
+  - `optionalSessionGuard`: resolves a real session onto a `@zanix/space` page when one exists,
+    without ever gating the request on it — the opposite failure mode from `pageSessionGuard`, for a
+    public page that renders differently for a visitor who happens to have a session.
   - `oauthStateIssueGuard`/`oauthStateVerifyGuard`: protects an OAuth2 login flow's authorization
     redirect and its callback against CSRF, via the `state` round trip the OAuth2 code-flow spec
     itself defines. See

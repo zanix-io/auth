@@ -214,6 +214,7 @@ export {
 } from 'modules/middlewares/rate-limit.guard.ts'
 export { jwtValidationGuard } from 'modules/middlewares/jwt-validation.guard.ts'
 export { pageSessionGuard } from 'modules/middlewares/page-session.guard.ts'
+export { optionalSessionGuard } from 'modules/middlewares/optional-session.guard.ts'
 export { permissionsPipe } from 'modules/middlewares/permissions.pipe.ts'
 export { ADMIN_IP_ALLOWLIST_ENV, ipAllowlistGuard } from 'modules/middlewares/ip-allowlist.guard.ts'
 export type { IpAllowlistOptions } from 'modules/middlewares/ip-allowlist.guard.ts'
