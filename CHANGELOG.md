@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-09-13
+
+### Added
+
+- **`OAUTH_STATE_MAX_AGE_SECONDS`** (`modules/middlewares/oauth-state.guard.ts`) — now exported, not
+  just used internally by `oauthStateIssueGuard`. Real, confirmed consumer shape this closes: an app
+  whose own `LoginClient.oauthAuthorize` mints `state` itself (`zanix/iam`'s REST
+  `GET
+  /login/:provider` has no way to accept an externally-supplied value the way
+  `OAuth2Connector.generateAuthUrl({ state })` does) can't use `oauthStateIssueGuard` to set this
+  cookie at all, and has to build its own equivalent `Set-Cookie` header carrying whatever value the
+  real upstream response returns — a real Presenza consumer had silently hardcoded this exact value
+  locally to "match" this guard instead of importing it, a real drift risk this export closes for
+  any future change to the real value.
+
 ## [1.5.1] - 2026-09-13
 
 ### Fixed

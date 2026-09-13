@@ -28,8 +28,16 @@ export const OAUTH_STATE_LOCALS_KEY = 'oauthState'
  * How long the `state` cookie lives before it's considered abandoned — long enough to cover a real
  * provider redirect round trip (the user leaving to the provider's own login/consent screen and
  * coming back), short enough that an abandoned attempt's cookie doesn't linger.
+ *
+ * Exported (not just used internally) for a real, confirmed consumer shape: an app whose own
+ * `LoginClient.oauthAuthorize` mints `state` itself (`zanix/iam`'s REST `GET /login/:provider` has
+ * no way to accept an externally-supplied value the way `OAuth2Connector.generateAuthUrl({ state })`
+ * does) can't use {@linkcode oauthStateIssueGuard} to set this cookie, and has to build its own
+ * equivalent `Set-Cookie` header carrying whatever value the real upstream response returns —
+ * confirmed a real Presenza consumer had silently hardcoded this exact value locally to "match"
+ * this guard, a real drift risk this export closes.
  */
-const OAUTH_STATE_MAX_AGE_SECONDS = 60 * 10
+export const OAUTH_STATE_MAX_AGE_SECONDS = 60 * 10
 
 /**
  * The attribute set for the OAuth2 `state` cookie: `HttpOnly`/`Secure` like every Zanix

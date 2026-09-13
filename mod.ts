@@ -222,6 +222,7 @@ export { CAPTCHA_TOKEN_HEADER, captchaGuard } from 'modules/middlewares/captcha.
 export {
   OAUTH_STATE_COOKIE_NAME,
   OAUTH_STATE_LOCALS_KEY,
+  OAUTH_STATE_MAX_AGE_SECONDS,
   oauthStateIssueGuard,
   oauthStateVerifyGuard,
 } from 'modules/middlewares/oauth-state.guard.ts'
