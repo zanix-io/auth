@@ -1,11 +1,10 @@
 import { getRequestFromError } from '@zanix/server'
-import { HttpError } from '@zanix/errors'
 
 /**
  * An `OnErrorHandler`-shaped recovery function — pass it (typically alongside `@zanix/space`'s own
  * `createNotFoundHandler()`, composed via that package's `globalErrorHandler`) as `server.ssr.onError`
- * to turn an unauthenticated visit to a `pageSessionGuard`-protected page into a real redirect
- * instead of a raw JSON `401`.
+ * to turn an unauthenticated visit to a session-guarded page into a real redirect instead of a raw
+ * JSON `401`.
  *
  * ## The gap this closes
  *
@@ -21,6 +20,26 @@ import { HttpError } from '@zanix/errors'
  * own per-server-type `ServerOptions`), so this handler only ever runs for a page (SSR) request,
  * never for a real REST API caller expecting JSON — no need to special-case route shape here.
  *
+ * ## Structural check, not `instanceof` — a real, confirmed cross-package identity split
+ *
+ * Used to check `error instanceof HttpError` against this package's own `@zanix/errors` import —
+ * correct for `pageSessionGuard` (thrown from this same package, trivially the same class), but a
+ * real, reproduced gap for any OTHER guard that ALSO throws a real `HttpError('UNAUTHORIZED')` from
+ * its OWN separate import of `@zanix/errors` — e.g. `zanix/iam`'s own `iamSessionGuard`
+ * (`@zanix/iam/ui/sdk/session-guard`), the guard this package's own module doc explicitly names as
+ * the right tool for a consumer that delegates session issuance to a real, separately-deployed `iam`
+ * instead of using `pageSessionGuard` (deliberately NOT built on this package, to avoid exactly the
+ * coupling an `instanceof` check here would have silently required). Confirmed live (13 sep 2026,
+ * a real Presenza consumer): under `zanix space dev` specifically, `iamSessionGuard`'s own thrown
+ * `HttpError` and this package's own `@zanix/errors` import ended up as two distinct classes — the
+ * dev-mode SSR bundler has no structural guarantee it collapses two independently-resolved copies
+ * of the same published package into one instance for every possible combination of consumers — so
+ * `instanceof` silently declined every time, indistinguishable from "not handled" to every caller.
+ * Checked structurally instead — a real `HttpError` always serializes `name: 'HttpError'` and
+ * `status: { value, code }` (`@zanix/utils`'s own `HttpError` shape) — which is true regardless of
+ * which copy of the class produced it, closing this for `iamSessionGuard` and any other guard that
+ * throws a real `HttpError`, not just this package's own.
+ *
  * ## Requirements
  *
  * - `server.ssr.attachRequestToErrors: true` — without it, `getRequestFromError` finds nothing and
@@ -31,8 +50,8 @@ import { HttpError } from '@zanix/errors'
  *
  * Declines (returns `undefined`, the same "not handled, fall through" convention `@zanix/space`'s
  * own `createNotFoundHandler`/this package's own `recoverRotatedSessionCookie` already establish)
- * for anything that isn't a `401`, or that arrives with no request attached — composes safely with
- * other `OnErrorHandler`s regardless of order.
+ * for anything that isn't a `401`-shaped `HttpError`, or that arrives with no request attached —
+ * composes safely with other `OnErrorHandler`s regardless of order.
  *
  * @param options - Configuration for this handler.
  * @param options.loginUrl - Computes the login page to redirect to, given the original `Request`
@@ -67,7 +86,9 @@ export function redirectUnauthenticatedPageVisit(
   options: { loginUrl: (request: Request) => string | URL },
 ): (error: unknown) => Response | undefined {
   return (error: unknown) => {
-    if (!(error instanceof HttpError) || error.status.value !== 401) return undefined
+    if (typeof error !== 'object' || error === null) return undefined
+    const shape = error as { name?: unknown; status?: { value?: unknown } }
+    if (shape.name !== 'HttpError' || shape.status?.value !== 401) return undefined
     const request = getRequestFromError(error)
     if (!request) return undefined
     const location = options.loginUrl(request)

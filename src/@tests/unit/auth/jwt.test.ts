@@ -296,6 +296,27 @@ Deno.test('isJwtVerificationFailure: true only for a bare PermissionDenied', () 
   assertEquals(isJwtVerificationFailure(new HttpError('INTERNAL_SERVER_ERROR')), false)
 })
 
+/**
+ * Regression coverage: the same real, confirmed cross-package identity split
+ * `redirectUnauthenticatedPageVisit`'s own doc describes for `HttpError` — a consumer app reached
+ * through `zanix space dev`'s dev-mode SSR bundler has no guarantee its own `PermissionDenied`
+ * throw (from its OWN `@zanix/errors` import) is `instanceof` THIS package's own import of the
+ * same class. `isJwtVerificationFailure` must recognize it by shape regardless.
+ */
+Deno.test(
+  'isJwtVerificationFailure: true for a DIFFERENT PermissionDenied class with the same real shape',
+  () => {
+    class OtherPackagePermissionDenied extends Error {
+      public override name = 'PermissionDenied'
+    }
+    assertEquals(isJwtVerificationFailure(new OtherPackagePermissionDenied('bad token')), true)
+    assertEquals(isJwtVerificationFailure({ name: 'PermissionDenied' }), true)
+    assertEquals(isJwtVerificationFailure(null), false)
+    assertEquals(isJwtVerificationFailure(undefined), false)
+    assertEquals(isJwtVerificationFailure('PermissionDenied'), false)
+  },
+)
+
 Deno.test('toJwtHttpError: converts a JWT verify failure into an HttpError w/ that status', () => {
   const original = new PermissionDenied('Token has expired', {
     code: 'EXPIRED_TOKEN',

@@ -1,4 +1,4 @@
-import { HttpError, PermissionDenied } from '@zanix/errors'
+import { HttpError } from '@zanix/errors'
 
 // `HttpErrorCodes` itself isn't part of `@zanix/errors`' public export surface — derived from
 // `HttpError`'s own constructor instead of naming it directly, so this stays correct regardless.
@@ -18,8 +18,20 @@ type HttpErrorCodes = ConstructorParameters<typeof HttpError>[0]
  * doc), and each stays independently unit-tested against exactly that contract. Converting one to
  * an `HttpError` INSIDE the primitive itself would break that contract for every non-HTTP caller —
  * see {@link toJwtHttpError}'s own doc for where the conversion belongs instead.
+ *
+ * Checked structurally (`name === 'PermissionDenied'`), never `e instanceof PermissionDenied` —
+ * the identical real, confirmed cross-package identity split
+ * `redirectUnauthenticatedPageVisit`'s own doc describes for `HttpError` applies here too: both
+ * `toJwtHttpError` and this function are PUBLIC (any consumer app's own credential-exchange
+ * endpoint/refresh endpoint/validation guard is documented, real intended usage — see
+ * {@link toJwtHttpError}'s own doc), so a caller reached through `zanix space dev`'s dev-mode SSR
+ * bundler has no guarantee its own `PermissionDenied` throw and this package's own `@zanix/errors`
+ * import collapse to one class instance. `ApplicationError`'s own constructor sets
+ * `this.name = this.constructor.name`, so a real `PermissionDenied` always carries that name
+ * regardless of which copy of the class constructed it.
  */
-export const isJwtVerificationFailure = (e: unknown): boolean => e instanceof PermissionDenied
+export const isJwtVerificationFailure = (e: unknown): boolean =>
+  typeof e === 'object' && e !== null && (e as { name?: unknown }).name === 'PermissionDenied'
 
 /**
  * Normalizes a JWT decode/verification failure into an `HttpError` with `status` — call this at

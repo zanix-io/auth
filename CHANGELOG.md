@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-09-13
+
+### Fixed
+
+- **`redirectUnauthenticatedPageVisit` silently declined a real `HttpError('UNAUTHORIZED')` thrown
+  by a guard from a DIFFERENT package** — it checked `error instanceof HttpError` against this
+  package's own `@zanix/errors` import, correct only when the guard that threw is ALSO built on this
+  package (`pageSessionGuard`). Any other guard that throws its OWN real `HttpError` from its OWN
+  separate `@zanix/errors` import — `zanix/iam`'s own `iamSessionGuard`
+  (`@zanix/iam/ui/sdk/session-guard`), this package's own module doc's explicitly-named right tool
+  for a consumer that delegates session issuance to a real, separately-deployed `iam` instead of
+  using `pageSessionGuard` — ends up on a different class reference under `zanix space dev`'s
+  dev-mode SSR bundler, which has no structural guarantee it collapses two independently-resolved
+  copies of the same published package into one instance for every consumer combination. Confirmed
+  live (13 sep 2026, a real Presenza consumer): a cookie-less visit to an
+  `iamSessionGuard`-protected page returned the raw JSON `401` body instead of a real `302` to
+  `/login`. `instanceof` never threw either — the check just silently returned "not handled,"
+  indistinguishable from any other declined error. Now checks the error's shape structurally
+  (`name === 'HttpError'` and `status.value === 401`) instead of the error's class identity — true
+  regardless of which copy of `@zanix/errors` produced it, closing this for `iamSessionGuard` and
+  any other guard that throws a real `HttpError`, not just this package's own.
+
+- **`isJwtVerificationFailure` (`utils/jwt/verification-error.ts`) had the identical
+  `instanceof`-against-`@zanix/errors` exposure, one layer removed** — found in a proactive sweep
+  for the same bug class right after the fix above. Both it and `toJwtHttpError` are PUBLIC, with
+  their own doc explicitly inviting a consumer app's own credential-exchange endpoint/refresh
+  endpoint/validation guard to call them directly against a `PermissionDenied` THAT APP threw — the
+  exact same cross-package shape as the fix above, just not yet reproduced live (no current real
+  consumer calls either function outside this package's own internals). Hardened the same way:
+  `name === 'PermissionDenied'`, checked structurally — `ApplicationError`'s own constructor sets
+  `this.name = this.constructor.name`, so this holds regardless of which copy of the class
+  constructed the error. `recoverRotatedSessionCookie`/`attachRotatedSessionToError` were audited in
+  the same sweep and confirmed already immune — they were never `instanceof`-based, only ever a
+  plain non-enumerable own-property marker.
+
 ## [1.5.0] - 2026-09-12
 
 ### Added
