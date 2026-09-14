@@ -190,16 +190,30 @@ export abstract class OAuth2Connector<TUserInfo> extends RestClient {
    *   `responseType` for just this call — e.g. requesting the authorization-code flow from one
    *   call site while another still uses the connector's own default. Defaults to whatever the
    *   connector was constructed with (see {@link OAuth2ConnectorConfig.responseType}).
+   * @param {string} [options.loginHint] - Forwarded as the standard `login_hint` param (RFC-adjacent
+   *   convention shared by Google, Microsoft, and most other OIDC-compatible providers — GitHub's
+   *   own authorize endpoint simply ignores an unrecognized param, so this stays safe to pass
+   *   unconditionally from a generic caller too) — pre-fills/pre-selects the given email on the
+   *   provider's own account-chooser screen, skipping it entirely when the provider only has that
+   *   one account signed in. The real fix for "already know which account this is, don't make the
+   *   visitor pick again" (e.g. linking a provider to an already-authenticated session's own known
+   *   email) — never a guarantee the visitor can't still pick a different account manually.
    *
    * @returns The complete authorization URL and the `state` used to build it.
    */
   public generateAuthUrl(
-    options: { state?: string; scope?: string; responseType?: 'token' | 'code' } = {},
+    options: {
+      state?: string
+      scope?: string
+      responseType?: 'token' | 'code'
+      loginHint?: string
+    } = {},
   ): { url: string; state: string } {
     const {
       state = generateUUID(),
       scope = this.#config.defaultScope,
       responseType = this.#config.responseType,
+      loginHint,
     } = options
     const params = new URLSearchParams({
       client_id: this.clientId,
@@ -207,6 +221,7 @@ export abstract class OAuth2Connector<TUserInfo> extends RestClient {
       response_type: responseType,
       scope,
       state,
+      ...(loginHint ? { login_hint: loginHint } : {}),
       ...this.extraAuthParams(),
     })
 

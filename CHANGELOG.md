@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.5.4] - 2026-09-14
+
+### Added
+
+- **`OAuth2Connector.generateAuthUrl({ loginHint })`** — forwards the standard `login_hint`
+  authorize-URL param (Google, Microsoft, and most other OIDC-compatible providers share this
+  convention; an unrecognized param is simply ignored by providers that don't, e.g. GitHub). Real,
+  confirmed consumer shape this closes: an already-authenticated visitor connecting a provider to
+  their own account (e.g. `zanix/iam`'s own "Conectar" action on an existing session) had no way to
+  pre-fill/pre-select the account the provider's own chooser screen offers, even though the caller's
+  own session already knows exactly which email that should be — every such visitor saw the
+  provider's generic account picker instead. `OAuthFlow.generateAuthUrl` (`typings/auth.ts`) widened
+  to match.
+
 ## [1.5.3] - 2026-09-13
 
 ### Fixed

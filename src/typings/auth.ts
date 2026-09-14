@@ -290,11 +290,18 @@ export type OAuthFlow<U> = {
    *                           `responseType` for just this call — e.g. requesting the
    *                           authorization-code flow from one call site while another still uses
    *                           the connector's own default.
+   * @param {string} [options.loginHint] - Forwarded as the standard `login_hint` param — see
+   *                           `OAuth2Connector.generateAuthUrl`'s own doc for the full contract.
    *
    * @returns The generated OAuth URL along with the `state` used to build it.
    */
   generateAuthUrl: (
-    options?: { state?: string; scope?: string; responseType?: 'token' | 'code' },
+    options?: {
+      state?: string
+      scope?: string
+      responseType?: 'token' | 'code'
+      loginHint?: string
+    },
   ) => { url: string; state: string }
   /**
    * Verifies a OAuth token and retrieves the associated user information.

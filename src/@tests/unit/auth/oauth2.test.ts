@@ -122,6 +122,16 @@ Deno.test('generateAuthUrl() honors a PER-CALL responseType, over the instance d
   assertMatch(connector.generateAuthUrl().url, /response_type=token/)
 })
 
+Deno.test('generateAuthUrl() includes login_hint only when given', () => {
+  const connector = new TestOAuth2Connector(new MockRestClient())
+
+  const withHint = connector.generateAuthUrl({ loginHint: 'jane@example.com' })
+  assertMatch(withHint.url, /login_hint=jane%40example\.com/)
+
+  const withoutHint = connector.generateAuthUrl()
+  assert(!withoutHint.url.includes('login_hint'))
+})
+
 Deno.test('a per-instance endpoint override wins over the subclass defaults', () => {
   const connector = new TestOAuth2Connector(new MockRestClient(), {
     authUrl: 'https://override.example.com/authorize',
