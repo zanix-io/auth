@@ -22,9 +22,15 @@ export type RateLimitsOptions = ProxyTrustOptions & {
    */
   anonymousLimit?: false | number
   /**
-   * App this validation applies to.
-   * - If undefined, the validation is considered global.
-   * - If defined, it only applies to the specified app.
+   * App this validation applies to — an extra segment folded into the rate-limit cache key
+   * (`${app}-${sessionId}`), so distinct scopes never collide on the same counter.
+   * - If undefined AND this guard was built via the `@RateLimitGuard` method decorator, the
+   *   decorated method's own name is used as the default `app` instead of leaving the key global —
+   *   see `RateLimitGuard`'s own doc. This does NOT apply when `rateLimitGuard()` is called
+   *   directly (e.g. inside a `@Controller`'s `guards` array): there, undefined still means one
+   *   global bucket shared by every guard that also leaves `app` unset, exactly as before.
+   * - If defined, it only applies to the specified app/scope — pass the same string to multiple
+   *   guards to deliberately share one bucket across them.
    */
   app?: string
   // Redeclares `ProxyTrustOptions.trustProxyHeader` (same `boolean | undefined` type — this does

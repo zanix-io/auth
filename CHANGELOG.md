@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-09-13
+
+### Fixed
+
+- **`@RateLimitGuard`'s cache key had zero ecosystem adoption for its `app` disambiguator, letting
+  sibling routes share one rate-limit bucket.** `app` was optional with no default nudging its use,
+  and no call site in the ecosystem ever passed it — so every `@RateLimitGuard`-decorated method on
+  the same class/controller collapsed onto one shared counter per client identity. Real, confirmed
+  incident this caused in `zanix/iam`: ten sibling anonymous-guarded routes (`login`, `login/otp`,
+  `pwd/recovery`, ...) mixing different limits (a tight `criticRateLimit` alongside a looser
+  `freeRateLimit`) all shared ONE counter, so a single call to one route could silently exhaust an
+  unrelated route's separate budget — surfacing as a misleading "rate limited" error on a route the
+  client never touched. `RateLimitGuard` (the method decorator) now auto-derives `app` from the
+  decorated method's own name whenever the caller leaves `app` unset, isolating sibling methods by
+  default without requiring any change in consumers. This only isolates by method name, not by class
+  — two different classes/controllers with an identically-named decorated method would still collide
+  on the default key; pass `app` explicitly to disambiguate across classes or to deliberately share
+  one bucket across several methods. `rateLimitGuard()` called directly (e.g. inside a
+  `@Controller`'s `guards` array) is unaffected — there, omitting `app` still means one global
+  bucket, exactly as before.
+
 ## [1.5.2] - 2026-09-13
 
 ### Added
@@ -16,9 +37,9 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
   /login/:provider` has no way to accept an externally-supplied value the way
   `OAuth2Connector.generateAuthUrl({ state })` does) can't use `oauthStateIssueGuard` to set this
   cookie at all, and has to build its own equivalent `Set-Cookie` header carrying whatever value the
-  real upstream response returns — a real Presenza consumer had silently hardcoded this exact value
-  locally to "match" this guard instead of importing it, a real drift risk this export closes for
-  any future change to the real value.
+  real upstream response returns — a real consumer had silently hardcoded this exact value locally
+  to "match" this guard instead of importing it, a real drift risk this export closes for any future
+  change to the real value.
 
 ## [1.5.1] - 2026-09-13
 
@@ -34,13 +55,13 @@ adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
   using `pageSessionGuard` — ends up on a different class reference under `zanix space dev`'s
   dev-mode SSR bundler, which has no structural guarantee it collapses two independently-resolved
   copies of the same published package into one instance for every consumer combination. Confirmed
-  live (13 sep 2026, a real Presenza consumer): a cookie-less visit to an
-  `iamSessionGuard`-protected page returned the raw JSON `401` body instead of a real `302` to
-  `/login`. `instanceof` never threw either — the check just silently returned "not handled,"
-  indistinguishable from any other declined error. Now checks the error's shape structurally
-  (`name === 'HttpError'` and `status.value === 401`) instead of the error's class identity — true
-  regardless of which copy of `@zanix/errors` produced it, closing this for `iamSessionGuard` and
-  any other guard that throws a real `HttpError`, not just this package's own.
+  live (13 sep 2026, a real consumer): a cookie-less visit to an `iamSessionGuard`-protected page
+  returned the raw JSON `401` body instead of a real `302` to `/login`. `instanceof` never threw
+  either — the check just silently returned "not handled," indistinguishable from any other declined
+  error. Now checks the error's shape structurally (`name === 'HttpError'` and
+  `status.value === 401`) instead of the error's class identity — true regardless of which copy of
+  `@zanix/errors` produced it, closing this for `iamSessionGuard` and any other guard that throws a
+  real `HttpError`, not just this package's own.
 
 - **`isJwtVerificationFailure` (`utils/jwt/verification-error.ts`) had the identical
   `instanceof`-against-`@zanix/errors` exposure, one layer removed** — found in a proactive sweep

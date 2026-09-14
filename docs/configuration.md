@@ -72,6 +72,18 @@ plan matches, the value directly sets the allowed number of requests per window.
 Both `rateLimitGuard` and `jwtValidationGuard` accept an `app` option to scope the rate-limit cache
 key per app, so multiple apps sharing the same session/user ID don't collide.
 
+> **The `@RateLimitGuard` method decorator also uses `app` for per-ROUTE isolation, not only the
+> multi-app scenario above.** When `app` is left unset, `@RateLimitGuard` auto-derives it from the
+> decorated method's own name — so two `@RateLimitGuard`-decorated methods on the same
+> controller/class never share a counter by accident. This only isolates by method name, not by
+> class: two unrelated controllers that each happen to have a same-named decorated method (e.g. two
+> `login` methods) would still collide on the default key — pass `app` explicitly to disambiguate
+> across classes, or to deliberately share one bucket across several methods.
+>
+> This default does **not** apply when `rateLimitGuard(...)` is called directly (e.g. inside a
+> `@Controller`'s `guards` array) — there, omitting `app` still means one global bucket shared with
+> every other guard that also leaves it unset, exactly as before.
+
 > **`trustProxyHeader` is required whenever an anonymous session identity needs to be resolved** —
 > no default, ever. `true` keys the identity off the resolved client IP
 > (`x-forwarded-for`/`cf-connecting-ip`/`x-real-ip`) — only safe behind a trusted proxy that

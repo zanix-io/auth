@@ -250,3 +250,89 @@ export const shouldResetLimit = async (
   const { response: refreshed } = await guard(context) //  limit exceeded with 4 attempts
   assertFalse(refreshed)
 }
+
+// --- @RateLimitGuard's default per-method cache-key isolation -----------------------------------
+// Reproduces the real incident that motivated this default: several `@RateLimitGuard`-decorated
+// sibling methods, none of them passing `app`, used to all share ONE counter per client identity —
+// exhausting a tight limit on one route silently exhausted an unrelated route's separate budget
+// too. `RateLimitGuard` now resolves `app` to the decorated method's own name via
+// `resolveRateLimitApp` (unit-tested directly in `decorators.test.ts`) — these two asserts build
+// `rateLimitGuard` with the exact `app` values that default would produce (`'criticRateLimit'`,
+// `'freeRateLimit'`, ...), proving the underlying isolation mechanism actually holds end to end
+// against a real cache, for both an anonymous and an authenticated session.
+
+export const shouldIsolateDecoratedSiblingsAnonymous = async (
+  cache: 'cache:local' | 'cache:redis',
+) => {
+  await import('@zanix/datamaster/core') // load cache core
+  await (ProgramModule.connectors.get<ZanixCacheConnector>(cache)).clear() // reset data
+
+  // Mirrors the real incident: two sibling anonymous-guarded routes mixing different limits
+  // (e.g. `criticRateLimit=1`, `freeRateLimit=3`), each keyed only by its own method name — exactly
+  // what `@RateLimitGuard({ anonymousLimit: 1 })`/`@RateLimitGuard({ anonymousLimit: 3 })` on two
+  // methods named `criticRateLimit`/`freeRateLimit` would resolve to today, with neither one
+  // passing `app` explicitly.
+  const criticGuard = rateLimitGuard({
+    app: 'criticRateLimit',
+    anonymousLimit: 1,
+    trustProxyHeader: true,
+  })
+  const freeGuard = rateLimitGuard({
+    app: 'freeRateLimit',
+    anonymousLimit: 3,
+    trustProxyHeader: true,
+  })
+
+  // Same mocked headers for both calls, so both guards resolve to the SAME anonymous client
+  // identity (`getAnonymousSessionId` only hashes IP+User-Agent, never the guard's own limit) —
+  // exactly the "one client hitting two different routes" shape from the real incident.
+  const criticContext = contextMock()
+  const freeContext = contextMock()
+
+  const { response: criticFirst } = await criticGuard(criticContext)
+  assertFalse(criticFirst) // 1 request allowed
+  const { response: criticExhausted } = await criticGuard(criticContext)
+  assert(criticExhausted) // 2nd request on the tight route: rate limited
+
+  // The unrelated, looser sibling route must still have its own, untouched budget.
+  const { response: freeFirst } = await freeGuard(freeContext)
+  assertFalse(freeFirst)
+  const { response: freeSecond } = await freeGuard(freeContext)
+  assertFalse(freeSecond)
+  const { response: freeThird } = await freeGuard(freeContext)
+  assertFalse(freeThird)
+}
+
+export const shouldIsolateDecoratedSiblingsAuthenticated = async (
+  cache: 'cache:local' | 'cache:redis',
+) => {
+  await import('@zanix/datamaster/core') // load cache core
+  await (ProgramModule.connectors.get<ZanixCacheConnector>(cache)).clear() // reset data
+
+  // Authenticated sessions carry a single `rateLimit` value on the session itself (unlike
+  // `anonymousLimit`, it isn't a per-guard construction option), so both sibling methods here
+  // share the SAME budget — the isolation being proven is that they don't share the same COUNTER:
+  // exhausting one method's bucket must not pre-exhaust the other's for the identical session.
+  const methodAGuard = rateLimitGuard({
+    app: 'methodA',
+    anonymousLimit: false,
+    trustProxyHeader: true,
+  })
+  const methodBGuard = rateLimitGuard({
+    app: 'methodB',
+    anonymousLimit: false,
+    trustProxyHeader: true,
+  })
+
+  const context = contextMock()
+  context.locals.session = { id: 'shared-authenticated-session', type: 'user', rateLimit: 1 }
+
+  const { response: methodAFirst } = await methodAGuard(context)
+  assertFalse(methodAFirst) // 1 request allowed
+  const { response: methodAExhausted } = await methodAGuard(context)
+  assert(methodAExhausted) // 2nd request on methodA: rate limited
+
+  // methodB, decorated on the same class/session, must still have its own untouched budget.
+  const { response: methodBFirst } = await methodBGuard(context)
+  assertFalse(methodBFirst)
+}

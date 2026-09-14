@@ -3,6 +3,8 @@ import {
   addValidSessionHeaders,
   shouldFailDueLimit,
   shouldFailDueLimitAnonymous,
+  shouldIsolateDecoratedSiblingsAnonymous,
+  shouldIsolateDecoratedSiblingsAuthenticated,
   shouldLogError,
   shouldNotAddSessionHeaders,
   shouldResetLimit,
@@ -89,5 +91,26 @@ Deno.test({
   fn: async () => {
     Deno.env.set('REDIS_URI', 'redis://localhost:6379')
     await shouldResetLimit('cache:redis')
+  },
+})
+
+Deno.test({
+  sanitizeOps: false,
+  sanitizeResources: false,
+  name: '@RateLimitGuard should isolate sibling decorated methods by default (anonymous session)',
+  fn: async () => {
+    Deno.env.set('REDIS_URI', 'redis://localhost:6379')
+    await shouldIsolateDecoratedSiblingsAnonymous('cache:redis')
+  },
+})
+
+Deno.test({
+  sanitizeOps: false,
+  sanitizeResources: false,
+  name:
+    '@RateLimitGuard should isolate sibling decorated methods by default (authenticated session)',
+  fn: async () => {
+    Deno.env.set('REDIS_URI', 'redis://localhost:6379')
+    await shouldIsolateDecoratedSiblingsAuthenticated('cache:redis')
   },
 })

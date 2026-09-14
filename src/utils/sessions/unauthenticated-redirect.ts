@@ -30,7 +30,7 @@ import { getRequestFromError } from '@zanix/server'
  * the right tool for a consumer that delegates session issuance to a real, separately-deployed `iam`
  * instead of using `pageSessionGuard` (deliberately NOT built on this package, to avoid exactly the
  * coupling an `instanceof` check here would have silently required). Confirmed live (13 sep 2026,
- * a real Presenza consumer): under `zanix space dev` specifically, `iamSessionGuard`'s own thrown
+ * a real consumer): under `zanix space dev` specifically, `iamSessionGuard`'s own thrown
  * `HttpError` and this package's own `@zanix/errors` import ended up as two distinct classes — the
  * dev-mode SSR bundler has no structural guarantee it collapses two independently-resolved copies
  * of the same published package into one instance for every possible combination of consumers — so

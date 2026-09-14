@@ -3,6 +3,8 @@ import {
   addValidSessionHeaders,
   shouldFailDueLimit,
   shouldFailDueLimitAnonymous,
+  shouldIsolateDecoratedSiblingsAnonymous,
+  shouldIsolateDecoratedSiblingsAuthenticated,
   shouldLogError,
   shouldNotAddSessionHeaders,
   shouldResetLimit,
@@ -53,3 +55,19 @@ Deno.test('rateLimitGuard should reset limit after window second', async () => {
   Deno.env.delete('REDIS_URI')
   await shouldResetLimit('cache:local')
 })
+
+Deno.test(
+  '@RateLimitGuard should isolate sibling decorated methods by default (anonymous session)',
+  async () => {
+    Deno.env.delete('REDIS_URI')
+    await shouldIsolateDecoratedSiblingsAnonymous('cache:local')
+  },
+)
+
+Deno.test(
+  '@RateLimitGuard should isolate sibling decorated methods by default (authenticated session)',
+  async () => {
+    Deno.env.delete('REDIS_URI')
+    await shouldIsolateDecoratedSiblingsAuthenticated('cache:local')
+  },
+)

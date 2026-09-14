@@ -64,6 +64,11 @@ export const RATE_LIMIT_WINDOW_SECONDS_ENV = 'RATE_LIMIT_WINDOW_SECONDS'
  * These headers allow clients to monitor and respect rate limits to avoid being throttled.
  *
  * @param options - The rate limit configuration options.
+ * @param options.app - Optional cache-key scope. Left unset here, every guard built directly by
+ *                       this function (as opposed to via the `@RateLimitGuard` decorator, which
+ *                       auto-derives one from the decorated method's name — see its own doc) shares
+ *                       ONE global bucket per session with every other guard that also leaves it
+ *                       unset. See `RateLimitsOptions.app`'s own doc for the full contract.
  * @param options.windowSeconds -  Optional duration of the time window (in seconds) over which requests are counted.
  *                                 Defaults to `60` seconds. You can also override it using the `RATE_LIMIT_WINDOW_SECONDS` environment variable.
  * @param options.anonymousLimit - Maximum number of requests allowed for anonymous users within the time window.
