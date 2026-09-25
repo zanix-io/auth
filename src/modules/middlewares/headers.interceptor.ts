@@ -1,4 +1,4 @@
-import type { MiddlewareInterceptor } from '@zanix/server'
+import type { MiddlewareGlobalInterceptor } from '@zanix/server'
 
 import {
   checkAcceptedCookies,
@@ -36,12 +36,21 @@ import {
  * - A revoked session (`status: 'revoked'`) always gets the same `Set-Cookie` batch, at
  *   `Max-Age=0`, regardless of `X-Znx-Cookies-Accepted` — see `getSessionHeaders`'s own doc.
  *
- * @returns {MiddlewareInterceptor}
+ * Scoped to `server: ['rest', 'graphql', 'ssr']` — never `'socket'`. A WebSocket upgrade's
+ * underlying `Request` is closed/transferred to the raw socket the instant the upgrade
+ * completes, so reading cookies/headers off it here (`checkAcceptedCookies`) throws
+ * `TypeError: Request closed`, which `@zanix/server` surfaces as "Upgrade response was not
+ * returned from callback" — failing the WebSocket handshake for every connecting client. A
+ * `socket` connection has no equivalent "response headers" concept in the first place — it's
+ * accepted or rejected once, at the guard stage, where `jwtValidationGuard`/
+ * `@AuthTokenValidation` already populate the session — so excluding it loses nothing.
+ *
+ * @returns {MiddlewareGlobalInterceptor}
  *   A middleware interceptor function that enriches the response with
  *   session-derived headers.
  */
-export const sessionHeadersInterceptor = (): MiddlewareInterceptor => {
-  return (ctx, response) => {
+export const sessionHeadersInterceptor = (): MiddlewareGlobalInterceptor => {
+  const interceptor: MiddlewareGlobalInterceptor = (ctx, response) => {
     // `ctx.locals.session` first, `ctx.session` as fallback: `@zanix/server`'s
     // `contextSettingPipe` promotes `locals.session` to the frozen `ctx.session` exactly once,
     // during the pipe phase, before this interceptor runs — but that's only the *initial* value.
@@ -83,4 +92,7 @@ export const sessionHeadersInterceptor = (): MiddlewareInterceptor => {
 
     return response
   }
+
+  interceptor.exports = { server: ['rest', 'graphql', 'ssr'] }
+  return interceptor
 }

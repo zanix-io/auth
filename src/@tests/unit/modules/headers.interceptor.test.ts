@@ -18,6 +18,17 @@ function createCtx(overrides: any = {}) {
   } as any
 }
 
+Deno.test('sessionHeadersInterceptor excludes `socket` from its own exports.server', () => {
+  const interceptor = sessionHeadersInterceptor()
+
+  // A WebSocket connection's underlying `Request` is closed/transferred to the raw socket the
+  // instant the upgrade completes — this interceptor's own cookie/header reads would throw
+  // against it. `registerGlobalInterceptor` reads this `exports` property directly off the
+  // function (`@zanix/server`'s own `MiddlewareGlobalInterceptor` shape), so it must stay on the
+  // returned interceptor itself, not on some wrapper only ONE caller happens to apply.
+  assertEquals(interceptor.exports, { server: ['rest', 'graphql', 'ssr'] })
+})
+
 Deno.test('sessionHeadersInterceptor returns the response unchanged without a session', () => {
   const interceptor = sessionHeadersInterceptor()
   const response = new Response()

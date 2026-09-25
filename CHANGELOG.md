@@ -5,7 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## [1.5.4] - 2026-09-14
+## [1.5.5] - 2026-09-25
+
+### Fixed
+
+- **`sessionHeadersInterceptor` broke every `@Socket` connection in a process that also uses this
+  package's ordinary REST session/auth.** `Zanix.start()`'s zero-config `@zanix/auth/core`
+  side-effect import registers this interceptor globally, for every server type, with no scoping —
+  so it also ran on a WebSocket route's own connection/upgrade cycle. A WebSocket upgrade's
+  underlying `Request` is closed/transferred to the raw socket the instant the upgrade completes;
+  this interceptor's own `checkAcceptedCookies` (`Headers.get` on that already-closed `Request`)
+  threw `TypeError: Request closed`, which `@zanix/server` surfaced as "Upgrade response was not
+  returned from callback" — failing the WebSocket handshake for every connecting client. Now scoped
+  to `server: ['rest', 'graphql', 'ssr']` — `socket` never gets a real "response" to attach
+  session-status headers/cookies to in the first place (a socket connection is accepted or rejected
+  once, at the guard stage, and `jwtValidationGuard`/`@AuthTokenValidation` already populate the
+  session by then), so this loses nothing there while fixing every other server type's own
+  connection.
 
 ### Added
 
