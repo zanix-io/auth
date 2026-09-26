@@ -1,4 +1,7 @@
+import type { SessionTypes } from 'typings/sessions.ts'
+
 import { getRequestFromError } from '@zanix/server'
+import { addHeadersToResponse, getSessionHeaders } from './headers.ts'
 
 /**
  * An `OnErrorHandler`-shaped recovery function — pass it (typically alongside `@zanix/space`'s own
@@ -53,10 +56,27 @@ import { getRequestFromError } from '@zanix/server'
  * for anything that isn't a `401`-shaped `HttpError`, or that arrives with no request attached —
  * composes safely with other `OnErrorHandler`s regardless of order.
  *
+ * ## Clearing the dead cookie on the way out
+ *
+ * A page-guard rejection means the visitor's own session cookie is already dead — expired, revoked,
+ * or simply never set — but redirecting to `loginUrl` alone leaves whatever stale cookie the browser
+ * already holds untouched: the server side knows it's dead, the browser doesn't. A page whose own
+ * `redirect.condition` only checks cookie PRESENCE (never validity — the common, cheap shape a login
+ * page's own bounce-if-already-signed-in check takes) then bounces the visitor straight back to the
+ * page that just rejected them, an invisible loop with no way out short of manually clearing cookies.
+ * `options.clearSessionCookie` closes this: pass `true` for the common single-session-type case
+ * (clears the `'user'` type), or the exact {@linkcode SessionTypes} value a guard built on a
+ * different session type needs cleared. Omit it (the default) to keep this handler's original,
+ * redirect-only behavior — a consumer whose login page's own `redirect.condition` already re-verifies
+ * the cookie rather than trusting its presence has no real need for this.
+ *
  * @param options - Configuration for this handler.
  * @param options.loginUrl - Computes the login page to redirect to, given the original `Request`
  * this guard rejected. Return anything `Response`'s `Location` header accepts — an absolute URL, or
  * a path resolved against `request.url`.
+ * @param options.clearSessionCookie - When set, also attaches the `Set-Cookie` headers that clear
+ * the dead session cookie (see the section above) — `true` for the `'user'` session type, or an
+ * explicit {@linkcode SessionTypes} for a guard built on a different one. Omitted by default.
  *
  * @example
  * ```ts
@@ -83,7 +103,10 @@ import { getRequestFromError } from '@zanix/server'
  * ```
  */
 export function redirectUnauthenticatedPageVisit(
-  options: { loginUrl: (request: Request) => string | URL },
+  options: {
+    loginUrl: (request: Request) => string | URL
+    clearSessionCookie?: boolean | SessionTypes
+  },
 ): (error: unknown) => Response | undefined {
   return (error: unknown) => {
     if (typeof error !== 'object' || error === null) return undefined
@@ -92,6 +115,21 @@ export function redirectUnauthenticatedPageVisit(
     const request = getRequestFromError(error)
     if (!request) return undefined
     const location = options.loginUrl(request)
-    return new Response(null, { status: 302, headers: { location: String(location) } })
+    const response = new Response(null, { status: 302, headers: { location: String(location) } })
+
+    if (options.clearSessionCookie) {
+      const type: SessionTypes = options.clearSessionCookie === true
+        ? 'user'
+        : options.clearSessionCookie
+      const headers = getSessionHeaders({
+        cookiesAccepted: true,
+        type,
+        subject: '',
+        sessionStatus: 'revoked',
+      })
+      addHeadersToResponse(response, headers)
+    }
+
+    return response
   }
 }

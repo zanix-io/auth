@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-09-26
+
+### Added
+
+- **`redirectUnauthenticatedPageVisit({ clearSessionCookie })`** — optionally clears the dead
+  session cookie alongside the login redirect. Without it, a rejected visitor's own dead
+  `X-Znx-App-Token` cookie stays in the browser untouched, so a login page whose own
+  `redirect.condition` only checks cookie presence (never validity) bounces them straight back to
+  the page that just rejected them — an invisible loop with no way out short of manually clearing
+  cookies. Pass `true` for the common `'user'` session type, or an explicit `SessionTypes` for a
+  guard built on a different one.
+- **`peekSessionPermissions(request)`** — reads a request's session-cookie permissions in read-only
+  mode, with no guard and no token rotation. For a context with no guard of its own to attach to at
+  all, e.g. a `@zanix/space` root `layout.tsx` deciding which nav links a signed-in visitor's own
+  permissions should show — `PageContext` never carries `session` there, by design, and re-running
+  `refreshSessionTokens` a second time in the same request throws (the page's own guard already
+  rotated and blocklisted that cookie once). A missing/expired/malformed/tampered cookie resolves to
+  `[]`, never a thrown error.
+
 ## [1.5.5] - 2026-09-25
 
 ### Fixed

@@ -1,4 +1,4 @@
-import { assert, assertEquals } from '@std/assert'
+import { assert, assertEquals, assertFalse } from '@std/assert'
 import { HttpError } from '@zanix/errors'
 import { attachRequestToError } from '@zanix/server'
 import { redirectUnauthenticatedPageVisit } from 'utils/sessions/unauthenticated-redirect.ts'
@@ -19,6 +19,72 @@ Deno.test(
     assert(response instanceof Response, 'expected a real Response, not undefined')
     assertEquals(response.status, 302)
     assertEquals(response.headers.get('location'), '/es/login')
+  },
+)
+
+Deno.test(
+  'redirectUnauthenticatedPageVisit: omitting clearSessionCookie keeps the original redirect-only ' +
+    'behavior — no Set-Cookie header at all',
+  async () => {
+    const error = attachRequestToError(
+      new HttpError('UNAUTHORIZED'),
+      new Request('https://example.test/es/profile'),
+    )
+    const handler = redirectUnauthenticatedPageVisit({ loginUrl: () => '/es/login' })
+
+    const response = await handler(error)
+
+    assert(response instanceof Response, 'expected a real Response, not undefined')
+    assertEquals(response.headers.getSetCookie(), [])
+  },
+)
+
+Deno.test(
+  'redirectUnauthenticatedPageVisit: clearSessionCookie: true clears the "user" session cookie ' +
+    'alongside the redirect',
+  async () => {
+    const error = attachRequestToError(
+      new HttpError('UNAUTHORIZED'),
+      new Request('https://example.test/es/profile'),
+    )
+    const handler = redirectUnauthenticatedPageVisit({
+      loginUrl: () => '/es/login',
+      clearSessionCookie: true,
+    })
+
+    const response = await handler(error)
+
+    assert(response instanceof Response, 'expected a real Response, not undefined')
+    assertEquals(response.status, 302)
+    assertEquals(response.headers.get('location'), '/es/login')
+    const setCookies = response.headers.getSetCookie()
+    const appToken = setCookies.find((c) => c.startsWith('X-Znx-App-Token='))
+    assert(appToken, `expected a cleared X-Znx-App-Token cookie among: ${setCookies.join(' | ')}`)
+    assert(appToken.includes('Max-Age=0'), `expected Max-Age=0, got: ${appToken}`)
+  },
+)
+
+Deno.test(
+  'redirectUnauthenticatedPageVisit: clearSessionCookie: "api" clears the "api" session status ' +
+    'header instead of the "user" one — "api" has no cookie token to clear at all',
+  async () => {
+    const error = attachRequestToError(
+      new HttpError('UNAUTHORIZED'),
+      new Request('https://example.test/es/profile'),
+    )
+    const handler = redirectUnauthenticatedPageVisit({
+      loginUrl: () => '/es/login',
+      clearSessionCookie: 'api',
+    })
+
+    const response = await handler(error)
+
+    assert(response instanceof Response, 'expected a real Response, not undefined')
+    assertEquals(response.headers.get('X-Znx-Api-Session-Status'), 'revoked')
+    assertFalse(
+      response.headers.getSetCookie().some((c) => c.startsWith('X-Znx-App-Token=')),
+      'the "api" type has no cookie token — nothing to clear as a Set-Cookie',
+    )
   },
 )
 
