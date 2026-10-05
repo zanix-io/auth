@@ -1,14 +1,23 @@
 import type { RateLimitsOptions } from 'typings/sessions.ts'
-import { httpErrorResponse, type MiddlewareGlobalGuard, RATE_LIMIT_HEADERS } from '@zanix/server'
+import {
+  httpErrorResponse,
+  type MiddlewareGlobalGuard,
+  RATE_LIMIT_HEADERS,
+  type Session,
+} from '@zanix/server'
 import type { ControlPlaneCacheModules } from '@zanix/datamaster/cache/types'
 
-import { checkRateLimit, getRateLimitForSession } from 'utils/sessions/rate-limit.ts'
+import {
+  checkRateLimit,
+  getRateLimitForSession,
+  getRateLimitIdentity,
+} from 'utils/sessions/rate-limit.ts'
 import {
   assertTrustProxyHeaderDecided,
   generateAnonymousSession,
 } from 'utils/sessions/anonymous.ts'
 import { CACHE_KEYS } from 'utils/constants.ts'
-import { HttpError } from '@zanix/errors'
+import { HttpError, InternalError } from '@zanix/errors'
 
 /**
  * Env var setting the rate-limit window (in seconds) `rateLimitGuard` counts requests over.
@@ -55,8 +64,10 @@ export const RATE_LIMIT_WINDOW_SECONDS_ENV = 'RATE_LIMIT_WINDOW_SECONDS'
  * ## Rate Limit Response Headers
  * When the rate limit is applied or successfully validated, the response may include the following headers:
  *
- * - `X-Znx-RateLimit-Limit`: The maximum number of requests allowed in the current window.
- * - `X-Znx-RateLimit-Remaining`: The number of requests remaining in the current window.
+ * - `X-Znx-RateLimit-Limit`: The maximum number of requests allowed in the current window, as
+ *   applied (the explicit `limit`, the limit resolved from `RATE_LIMIT_PLANS`, or `session.rateLimit`
+ *   itself), never the plan index.
+ * - `X-Znx-RateLimit-Remaining`: The number of requests remaining in the current window (never negative).
  * - `X-Znx-RateLimit-Reset`: The number of **seconds remaining** until the current rate limit window resets.
  *   Clients can use this value to know how long to wait before sending the next request without being throttled.
  * - `Retry-After`: Indicates how many seconds to wait before making the next request, typically returned when the limit is exceeded.
@@ -71,6 +82,14 @@ export const RATE_LIMIT_WINDOW_SECONDS_ENV = 'RATE_LIMIT_WINDOW_SECONDS'
  *                       unset. See `RateLimitsOptions.app`'s own doc for the full contract.
  * @param options.windowSeconds -  Optional duration of the time window (in seconds) over which requests are counted.
  *                                 Defaults to `60` seconds. You can also override it using the `RATE_LIMIT_WINDOW_SECONDS` environment variable.
+ * @param options.limit - Optional explicit maximum of requests per window for authenticated
+ *                           sessions, in absolute value. It replaces the limit derived from
+ *                           `session.rateLimit` and is never looked up in `RATE_LIMIT_PLANS`.
+ *                           Must be a positive integer. See `RateLimitsOptions.limit`.
+ * @param options.key - Identity the counter is keyed on: `'session'` (default, one bucket per token)
+ *                           or `'subject'` (one bucket per `session.subject`, shared by all of its
+ *                           tokens; falls back to the session id without a subject). See
+ *                           `RateLimitsOptions.key`.
  * @param options.anonymousLimit - Maximum number of requests allowed for anonymous users within the time window.
  *                           Defaults to `100`.
  *                           Set to `0` or `false` to disable access for anonymous users.
@@ -84,13 +103,21 @@ export const RATE_LIMIT_WINDOW_SECONDS_ENV = 'RATE_LIMIT_WINDOW_SECONDS'
  * @function rateLimitGuard
  * @returns {MiddlewareGuard} A middleware guard instance that applies rate limiting logic to incoming requests.
  * @throws {InternalError} If anonymous access is enabled (`anonymousLimit` isn't `false`/`0`) but
- * `trustProxyHeader` isn't explicitly `true` or `false`.
+ * `trustProxyHeader` isn't explicitly `true` or `false`, or if `limit` isn't a positive integer.
+ *
+ * @example
+ * ```ts
+ * // 10 requests per minute per operator, shared by all of that operator's tokens.
+ * rateLimitGuard({ app: 'admin:mutations', limit: 10, key: 'subject', anonymousLimit: false })
+ * ```
  */
 export const rateLimitGuard = (
   options: RateLimitsOptions = {},
 ): MiddlewareGlobalGuard => {
   const {
     app,
+    limit,
+    key: keyBy = 'session',
     windowSeconds = Number(Deno.env.get(RATE_LIMIT_WINDOW_SECONDS_ENV)) || 60,
     anonymousLimit = 100,
     trustProxyHeader,
@@ -105,11 +132,21 @@ export const rateLimitGuard = (
   // time, not on the first request.
   if (anonymousLimit) assertTrustProxyHeaderDecided(trustProxyHeader, 'rateLimitGuard')
 
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+    throw new InternalError('rateLimitGuard `limit` must be a positive integer.', {
+      code: 'RATE_LIMIT_INVALID_LIMIT',
+      meta: { source: 'zanix', method: 'rateLimitGuard', limit },
+    })
+  }
+
   const { limitHeader, remainingHeader, resetHeader, retryAfterHeader } = RATE_LIMIT_HEADERS
 
   return async (ctx) => {
     const { req: { headers }, locals: { session } } = ctx
-    const sessionRateLimit = session?.rateLimit
+    // An explicit `limit` makes any non-anonymous session limitable, whether or not it carries a
+    // `rateLimit` plan value.
+    const sessionRateLimit = session?.rateLimit ||
+      (limit !== undefined && session && session.type !== 'anonymous' ? limit : undefined)
     if (!sessionRateLimit && !anonymousLimit) {
       throw new HttpError('UNAUTHORIZED', {
         message: 'Access to this resource is not allowed.',
@@ -125,7 +162,7 @@ export const rateLimitGuard = (
     }
 
     ctx.locals.session = sessionRateLimit
-      ? session
+      ? session as Session
       : await generateAnonymousSession(anonymousLimit as number, headers, {
         trustProxyHeader,
         trustedHeaders,
@@ -133,13 +170,20 @@ export const rateLimitGuard = (
 
     Object.freeze(ctx.locals.session.rateLimit)
 
-    const { id: sessionId, type: sessionType, rateLimit } = ctx.locals.session
+    const currentSession = ctx.locals.session
+    const { id: sessionId, type: sessionType, rateLimit: planRateLimit } = currentSession
+    const explicitLimit = sessionType === 'anonymous' ? undefined : limit
+    // The one place the applied maximum is resolved: the counter and the headers both use it.
+    const maxRequests = explicitLimit ?? getRateLimitForSession(planRateLimit)
+    const identity = sessionType === 'anonymous'
+      ? sessionId
+      : getRateLimitIdentity(currentSession, keyBy)
 
-    const key = `${CACHE_KEYS.rateLimit}:${app ? `${app}-${sessionId}` : sessionId}`
+    const key = `${CACHE_KEYS.rateLimit}:${app ? `${app}-${identity}` : identity}`
 
     const { count, createdAt, canContinue, failedAttempts } = await checkRateLimit(
       ctx.providers.get<ControlPlaneCacheModules>('cache'),
-      { key, windowSeconds, maxRequests: getRateLimitForSession(rateLimit) },
+      { key, windowSeconds, maxRequests },
     )
 
     const dateInSeconds = Math.floor(Date.now() / 1000) - createdAt
@@ -156,7 +200,7 @@ export const rateLimitGuard = (
             source: 'zanix',
             sessionRef: sessionId,
             sessionType,
-            rateLimit,
+            rateLimit: maxRequests,
             windowSeconds,
             requestId: ctx.id,
           },
@@ -172,8 +216,8 @@ export const rateLimitGuard = (
 
     return {
       headers: {
-        [limitHeader]: rateLimit.toString(),
-        [remainingHeader]: (rateLimit - count).toString(),
+        [limitHeader]: maxRequests.toString(),
+        [remainingHeader]: Math.max(0, maxRequests - count).toString(),
         [resetHeader]: secondsUntilReset,
       },
     }

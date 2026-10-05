@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-10-05
+
+### Added
+
+- **`rateLimitGuard`/`@RateLimitGuard` option `limit`** — an explicit maximum of requests per window
+  for authenticated sessions, as an absolute count. It replaces the limit taken from
+  `session.rateLimit` and is never looked up in `RATE_LIMIT_PLANS`, so a small value such as `1` or
+  `2` is a request count even when plans `1` and `2` exist. It also limits a session that carries no
+  `rateLimit`. Anonymous callers keep using `anonymousLimit`. Must be a positive integer, otherwise
+  the guard throws at construction. `X-Znx-RateLimit-Limit`/`-Remaining` report the explicit value.
+- **`rateLimitGuard`/`@RateLimitGuard` option `key: 'session' | 'subject'`** — the identity the
+  counter is keyed on. `'session'` (default, unchanged) keys on `session.id` (the token's `jti`), so
+  each login or refresh starts a new counter. `'subject'` keys on `session.subject`, so every token
+  of the same subject shares one counter; a session without a subject falls back to `session.id`.
+  Exports the `RateLimitKey` type.
+- **`missingScopes(required, held)`** — lists the required scopes that `held` does not cover,
+  applying `scopeValidation` to each one: a held `*` covers every scope, only `*` covers a required
+  `*`, and there are no prefix wildcards. The result has no repeats and keeps the order of
+  `required`. Accepts any iterable and does not modify its inputs.
+
+### Fixed
+
+- **`rateLimitGuard` response headers report the applied limit.** `X-Znx-RateLimit-Limit` and
+  `X-Znx-RateLimit-Remaining` used `session.rateLimit` as is, so with `RATE_LIMIT_PLANS` defined
+  they reported the plan index (`1`) and a negative remaining instead of the resolved maximum
+  (`1000`). Both now derive from the same resolved maximum the counter enforces, and `Remaining`
+  never goes below `0`. The `rateLimit` field of the `TOO_MANY_REQUESTS` error meta reports the same
+  value. Enforced limits are unchanged.
+
 ## [1.6.0] - 2026-09-26
 
 ### Added

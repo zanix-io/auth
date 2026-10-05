@@ -1,6 +1,9 @@
 import type { JWTPayload } from './jwt.ts'
 import type { ProxyTrustOptions } from '@zanix/helpers'
 
+/** Identity a rate-limit counter is keyed on. See {@linkcode RateLimitsOptions.key}. */
+export type RateLimitKey = 'session' | 'subject'
+
 /**
  * The rate limit configuration options. `trustProxyHeader`/`trustedHeaders` are `@zanix/helpers`'s
  * shared {@linkcode ProxyTrustOptions} contract — see that type's own doc for the general shape;
@@ -33,6 +36,27 @@ export type RateLimitsOptions = ProxyTrustOptions & {
    *   guards to deliberately share one bucket across them.
    */
   app?: string
+  /**
+   * Explicit maximum number of requests per window for authenticated (non-anonymous) sessions,
+   * in absolute value. When set, it replaces the limit derived from `session.rateLimit` and is
+   * never looked up in `RATE_LIMIT_PLANS`, so a value that happens to equal a plan index (e.g.
+   * `1` or `2`) is still read as a request count. The `X-Znx-RateLimit-Limit` and `-Remaining`
+   * headers report this value. Must be a positive integer.
+   *
+   * Left unset, the limit comes from the session's plan, exactly as `session.rateLimit` documents.
+   * Anonymous callers are always governed by {@linkcode RateLimitsOptions.anonymousLimit}.
+   */
+  limit?: number
+  /**
+   * Identity the rate-limit counter is keyed on for authenticated sessions:
+   * - `'session'` (default): `session.id`, the token's `jti`. Every token has its own bucket, so
+   *   each login or refresh starts a fresh counter.
+   * - `'subject'`: `session.subject`, the token's `sub`. Every token of the same subject shares
+   *   one bucket. A session without a subject falls back to `session.id`.
+   *
+   * Combine it with `app` so the bucket belongs to a route or a group of routes.
+   */
+  key?: RateLimitKey
   // Redeclares `ProxyTrustOptions.trustProxyHeader` (same `boolean | undefined` type — this does
   // NOT change what's accepted) purely so hovering it on `RateLimitsOptions` specifically shows
   // THIS doc instead of `ProxyTrustOptions`'s generic one. `trustedHeaders` is deliberately NOT

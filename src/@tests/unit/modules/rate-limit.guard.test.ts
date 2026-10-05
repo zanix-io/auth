@@ -85,3 +85,13 @@ Deno.test(
     rateLimitGuard({ trustProxyHeader: false })
   },
 )
+
+Deno.test('rateLimitGuard throws at construction when `limit` is not a positive integer', () => {
+  for (const limit of [0, -1, 1.5, NaN]) {
+    assertThrows(
+      () => rateLimitGuard({ anonymousLimit: false, limit }),
+      InternalError,
+      'positive integer',
+    )
+  }
+})

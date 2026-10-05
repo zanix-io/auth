@@ -35,6 +35,23 @@ of the flows below or in the README's Google OAuth2 example) are stored as the J
 - In both cases, access is granted if **at least one** required permission matches — not all of
   them. `permissions: ['admin', 'write:user']` means "admin OR write:user", not "both."
 - A session whose `aud`/scope includes `'*'` is granted access to any permission check.
+- For an "ALL of these" check, `missingScopes(required, held)` lists the required scopes that `held`
+  does not cover (`[]` when everything is covered). It applies `scopeValidation`'s rules one scope
+  at a time: a held `'*'` covers every scope, no scope but `'*'` covers a required `'*'`, and there
+  are no prefix wildcards (`'iam:*'` does not cover `'iam:read'`). The result has no repeats and
+  keeps the order of `required`.
+
+```ts
+import { missingScopes } from '@zanix/auth'
+
+missingScopes(['read', 'write'], ['read']) // ['write']
+missingScopes(['read', 'write'], ['*']) // []
+missingScopes(['*'], ['read', 'write']) // ['*']
+
+if (missingScopes(requested, ctx.session.scope).length) {
+  // refuse: the caller cannot grant what it does not hold
+}
+```
 
 ---
 

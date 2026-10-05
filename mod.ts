@@ -178,6 +178,7 @@ export type {
 export type {
   AppTokenBaseAccess,
   DerivedSession,
+  RateLimitKey,
   RateLimitsOptions,
   SessionStatus,
   SessionTokens,
@@ -185,7 +186,7 @@ export type {
 } from 'typings/sessions.ts'
 
 // Utils
-export { scopeValidation } from 'utils/scope.ts'
+export { missingScopes, scopeValidation } from 'utils/scope.ts'
 export { generateOTP, verifyOTP } from 'utils/otp.ts'
 export { generateTOTP, generateTOTPSecret, getTOTPProvisioningUri, verifyTOTP } from 'utils/totp.ts'
 export { getSecretByToken } from 'utils/jwt/secrets.ts'

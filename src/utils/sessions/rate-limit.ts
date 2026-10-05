@@ -1,4 +1,4 @@
-import type { CheckRateLimitResult } from 'typings/sessions.ts'
+import type { CheckRateLimitResult, RateLimitKey } from 'typings/sessions.ts'
 import type { ControlPlaneCacheModules } from '@zanix/datamaster/cache/types'
 
 import { RATE_LIMIT } from 'utils/lua.ts'
@@ -139,4 +139,30 @@ export function getRateLimitForSession(sessionRateLimit: number): number {
   }
   // Look up the session.rateLimit index in the plan map
   return rateLimitPlanMap.get(sessionRateLimit) || sessionRateLimit // Default to session.rateLimit if not found
+}
+
+/**
+ * Resolves the identity a rate-limit counter is keyed on for an authenticated session.
+ *
+ * @param session - The session being limited.
+ * @param session.id - The token id (`jti`), unique per token.
+ * @param session.subject - The token subject (`sub`), shared by every token of the same account.
+ * @param key - `'session'` (default) returns `session.id`; `'subject'` returns
+ *   `subject:<session.subject>`, or `session.id` when the session has no non-empty string subject.
+ * @returns The identity segment of the rate-limit cache key.
+ *
+ * @example
+ * ```ts
+ * getRateLimitIdentity({ id: 'jti-1', subject: 'ana' }, 'subject') // 'subject:ana'
+ * getRateLimitIdentity({ id: 'jti-1', subject: 'ana' }) // 'jti-1'
+ * getRateLimitIdentity({ id: 'jti-1' }, 'subject') // 'jti-1'
+ * ```
+ */
+export function getRateLimitIdentity(
+  session: { id: string; subject?: unknown },
+  key: RateLimitKey = 'session',
+): string {
+  const { id, subject } = session
+  if (key === 'subject' && typeof subject === 'string' && subject) return `subject:${subject}`
+  return id
 }

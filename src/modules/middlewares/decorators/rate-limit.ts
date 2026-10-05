@@ -4,6 +4,21 @@ import { defineMiddlewareDecorator, type ZanixGenericDecorator } from '@zanix/se
 import { rateLimitGuard } from '../rate-limit.guard.ts'
 
 /**
+ * Resolves the effective `app` cache-key scope for a `RateLimitGuard`-decorated target: the
+ * caller's own explicit `options.app` when given, otherwise the decorated member's own name
+ * (falling back to `undefined` — the pre-existing "global" behavior — when neither is available,
+ * e.g. an anonymous class expression). Exported as a pure function specifically so this resolution
+ * rule is unit-testable on its own, without needing to reach into `@zanix/server`'s own internal
+ * decorator-registration machinery (deliberately not part of its public surface).
+ */
+export function resolveRateLimitApp(
+  options: Pick<RateLimitsOptions, 'app'>,
+  context?: ClassDecoratorContext | ClassMethodDecoratorContext,
+): string | undefined {
+  return options.app ?? (context?.name ? String(context.name) : undefined)
+}
+
+/**
  * A method-level decorator that enforces a rate limit on a handler or method.
  *
  * This decorator applies rate limiting to specific methods, such as API endpoints,
@@ -44,6 +59,10 @@ import { rateLimitGuard } from '../rate-limit.guard.ts'
  * @param options - Configuration object for the rate limit, including:
  *                  - `anonymousLimit`: Maximum number of requests for anonymous users.
  *                  - `windowSeconds`: Time window (in seconds) within which the limit applies.
+ *                  - `limit`: Explicit maximum of requests per window for authenticated sessions
+ *                    (absolute value, never looked up in `RATE_LIMIT_PLANS`).
+ *                  - `key`: `'session'` (default) or `'subject'` to share one counter across all
+ *                    the tokens of a subject. See `RateLimitsOptions.key`.
  *                  - `app`: Optional explicit cache-key scope — overrides the method-name default
  *                    described above. See `RateLimitsOptions.app`'s own doc.
  *
@@ -59,22 +78,15 @@ import { rateLimitGuard } from '../rate-limit.guard.ts'
  *   // handler logic here
  * }
  * ```
+ *
+ * @example Per-operator limit that survives re-login and token refresh
+ * ```ts
+ * @RateLimitGuard({ app: 'admin:mutations', limit: 10, key: 'subject', anonymousLimit: false })
+ * async function handleMutation(ctx: HandlerContext) {
+ *   // at most 10 requests per window per authenticated subject
+ * }
+ * ```
  */
-/**
- * Resolves the effective `app` cache-key scope for a `RateLimitGuard`-decorated target: the
- * caller's own explicit `options.app` when given, otherwise the decorated member's own name
- * (falling back to `undefined` — the pre-existing "global" behavior — when neither is available,
- * e.g. an anonymous class expression). Exported as a pure function specifically so this resolution
- * rule is unit-testable on its own, without needing to reach into `@zanix/server`'s own internal
- * decorator-registration machinery (deliberately not part of its public surface).
- */
-export function resolveRateLimitApp(
-  options: Pick<RateLimitsOptions, 'app'>,
-  context?: ClassDecoratorContext | ClassMethodDecoratorContext,
-): string | undefined {
-  return options.app ?? (context?.name ? String(context.name) : undefined)
-}
-
 export function RateLimitGuard(
   options: RateLimitsOptions = {},
 ): ZanixGenericDecorator {

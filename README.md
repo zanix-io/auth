@@ -35,7 +35,8 @@ It provides a **unified and extensible system** for:
 - JWT generation and verification (HMAC and RSA with key rotation)
 - Session management (create, revoke, generate session headers)
 - Permission and scope validation (JWT audience)
-- Configurable rate limiting based on per-session plans
+- Configurable rate limiting based on per-session plans, with optional per-route limits and
+  per-subject counters
 - Ready-to-use middleware to protect routes and resources
 - Decorators and pipes for interactors and controllers
 
@@ -139,11 +140,13 @@ It provides a **unified and extensible system** for:
 
 - **Scope / Permission Validation**
   - `scopeValidation()`: validate that JWTs include the required permissions or scopes.
+  - `missingScopes(required, held)`: list the required scopes a held set does not cover.
 
 - **Middlewares**
   - `sessionHeadersInterceptor`: injects session headers.
   - `jwtValidationGuard`: validates JWT tokens in incoming requests.
-  - `rateLimitGuard`: applies rate limiting.
+  - `rateLimitGuard`: applies rate limiting (plan-based, or per route with `limit` and per account
+    with `key: 'subject'`; see [Rate Limiting](./docs/configuration.md#-rate-limiting)).
   - `ipAllowlistGuard`: restricts access to configured IP addresses or CIDR ranges.
   - `captchaGuard`: verifies a captcha response token (reCAPTCHA/hCaptcha/Turnstile) against a
     third-party anti-bot provider. See

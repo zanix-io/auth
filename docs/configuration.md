@@ -72,6 +72,35 @@ plan matches, the value directly sets the allowed number of requests per window.
 Both `rateLimitGuard` and `jwtValidationGuard` accept an `app` option to scope the rate-limit cache
 key per app, so multiple apps sharing the same session/user ID don't collide.
 
+`X-Znx-RateLimit-Limit` reports the maximum actually enforced in the window (the explicit `limit`,
+the limit resolved from `RATE_LIMIT_PLANS`, `session.rateLimit` itself, or `anonymousLimit`), never
+the plan index. `X-Znx-RateLimit-Remaining` is that maximum minus the requests counted, and never
+below `0`.
+
+### Explicit limit and per-subject counter
+
+`rateLimitGuard` and `@RateLimitGuard` take two options for authenticated sessions:
+
+| Option  | Default     | Effect                                                                                                                                                    |
+| ------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit` | unset       | Maximum requests per window, as an absolute count. Replaces the limit from `session.rateLimit`, skips `RATE_LIMIT_PLANS`, and must be a positive integer. |
+| `key`   | `'session'` | `'session'` counts per token (`session.id`, the `jti`). `'subject'` counts per `session.subject` (the `sub`), shared by every token of that subject.      |
+
+```ts
+// At most 10 requests per minute per operator, across logins and token refreshes.
+@RateLimitGuard({ app: 'admin:mutations', limit: 10, key: 'subject', anonymousLimit: false })
+```
+
+- With the default `key: 'session'`, every login or refresh issues a token with a new `jti` and
+  therefore a fresh counter. Use `key: 'subject'` for a limit that follows the account. A session
+  without a subject falls back to its id.
+- Set `app` so the counter belongs to the route (or group of routes sharing the same `app`).
+- `limit` and `windowSeconds` are the route's own figures; anonymous callers keep using
+  `anonymousLimit`.
+- When `RATE_LIMIT_PLANS` is defined, `session.rateLimit` is looked up as a plan index first, so a
+  small session value such as `1` or `2` selects that plan instead of meaning one or two requests.
+  `limit` is never looked up, which makes it the way to set a small absolute figure.
+
 > **The `@RateLimitGuard` method decorator also uses `app` for per-ROUTE isolation, not only the
 > multi-app scenario above.** When `app` is left unset, `@RateLimitGuard` auto-derives it from the
 > decorated method's own name — so two `@RateLimitGuard`-decorated methods on the same
